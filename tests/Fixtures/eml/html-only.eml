@@ -1,0 +1,16 @@
+From: Booking Desk <desk@example.com>
+To: answers@example.org
+Subject: Confirmation
+Date: Sun, 08 Nov 2026 04:00:00 +0000
+Message-ID: <html-1@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html><head><title>Ignore me</title><style>.x { color: red; }</style><script>alert(1)</script></head>
+<body>
+<h1>Booking   confirmed</h1>
+<p>Dear&nbsp;Jane,<br>your room is
+reserved &amp; paid.</p>
+<ul><li>Arrival: 14 Nov</li><li>Nights: 3</li></ul>
+</body></html>

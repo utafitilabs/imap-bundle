@@ -1,0 +1,29 @@
+Date: Sat, 8 Nov 2026 09:15:44 +0000 (UTC)
+From: Sam Poe <sam_poe@example.com>
+Reply-To: Sam Poe <sam_poe@example.com>
+To: Answers <answers@example.org>
+Message-ID: <1234567890.987654.1762593344123@mail.example.com>
+In-Reply-To: <enquiry-15@example.org>
+References: <enquiry-15@example.org>
+Subject: Re: Your enquiry
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_987654_1234567890.1762593344122"
+
+------=_Part_987654_1234567890.1762593344122
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+ Please book the March dates.
+Sam
+    On Friday, November 7, 2026 at 05:12:00 PM GMT+3, Answers <answers@example.org> wrote:
+ 
+ Dear Sam,
+Which dates suit you?
+
+------=_Part_987654_1234567890.1762593344122
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+<html><head></head><body><div class="ydp">Please book the March dates.<br>Sam</div><div class="yahoo_quoted">On Friday, November 7, 2026 at 05:12:00 PM GMT+3, Answers wrote:</div></body></html>
+------=_Part_987654_1234567890.1762593344122--

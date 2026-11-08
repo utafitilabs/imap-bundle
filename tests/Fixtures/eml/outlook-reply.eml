@@ -1,0 +1,45 @@
+From: "Doe, John" <john@example.net>
+To: "answers@example.org" <answers@example.org>, Mary Roe
+ <mary@example.net>
+CC: =?iso-8859-1?Q?Ren=E9e_Roe?= <renee@example.net>
+Subject: RE: Your enquiry
+Thread-Topic: Your enquiry
+Date: Sun, 8 Nov 2026 10:02:11 +0000
+Message-ID:
+ <DB9PR01MB1234ABCD@DB9PR01MB1234.eurprd01.prod.example.net>
+References: <enquiry-12@example.org>
+In-Reply-To: <enquiry-12@example.org>
+Content-Language: en-GB
+Content-Type: multipart/alternative;
+	boundary="_000_DB9PR01MB1234ABCD_"
+MIME-Version: 1.0
+
+--_000_DB9PR01MB1234ABCD_
+Content-Type: text/plain; charset="Windows-1252"
+Content-Transfer-Encoding: quoted-printable
+
+Hello,
+
+The price of =80450 per person is fine. We=92ll pay the deposit on Monday.
+
+Kind regards
+John
+
+From: Answers <answers@example.org>
+Sent: 07 November 2026 16:12
+To: Doe, John <john@example.net>
+Subject: Your enquiry
+
+Dear John,
+Our offer is =80450 per person.
+
+--_000_DB9PR01MB1234ABCD_
+Content-Type: text/html; charset="Windows-1252"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta http-equiv=3D"Content-Type" content=3D"text/html; charset=
+=3DWindows-1252"><style>p{margin:0}</style></head><body><p>Hello,</p><p>The=
+ price of =80450 per person is fine.</p><hr><div id=3D"divRplyFwdMsg"><b>Fr=
+om:</b> Answers</div></body></html>
+
+--_000_DB9PR01MB1234ABCD_--
