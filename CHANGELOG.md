@@ -4,9 +4,9 @@ All notable changes to `utafitilabs/imap-bundle` are documented here.
 
 ## Contents
 
-- [Unreleased](#unreleased)
+- [v0.1.0 — 2026-11-08](#v010--2026-11-08)
 
-## Unreleased
+## v0.1.0 — 2026-11-08
 
 ### Added
 
