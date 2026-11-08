@@ -15,6 +15,8 @@ namespace UtafitiLabs\ImapBundle\Service;
 
 use UtafitiLabs\ImapBundle\Model\Address;
 use UtafitiLabs\ImapBundle\Model\Attachment;
+use UtafitiLabs\ImapBundle\Model\DeliveryFailure;
+use UtafitiLabs\ImapBundle\Model\FailedRecipient;
 use UtafitiLabs\ImapBundle\Model\Message;
 use UtafitiLabs\ImapBundle\Model\MessageHeaders;
 
@@ -24,13 +26,37 @@ use UtafitiLabs\ImapBundle\Model\MessageHeaders;
  * charset, broken base64 or an unterminated multipart is read as well as it
  * can be.
  *
+ * It also tells automated mail from mail a person wrote, and reads delivery
+ * reports: the RFC 3464 delivery-status part when there is one, and
+ * otherwise the address list and the returned copy of an Exim-style text
+ * bounce.
+ *
  * @see https://www.rfc-editor.org/rfc/rfc5322
  * @see https://www.rfc-editor.org/rfc/rfc2045
  * @see https://www.rfc-editor.org/rfc/rfc2047
+ * @see https://www.rfc-editor.org/rfc/rfc3834
+ * @see https://www.rfc-editor.org/rfc/rfc3464
+ * @see https://www.rfc-editor.org/rfc/rfc3463
  */
 final class MessageReaderService
 {
     private const int MAX_DEPTH = 20;
+
+    private const string BOUNCE_SUBJECT = '/mail delivery failed|undeliver(?:ed|able)|delivery status notification \(failure\)|returned mail|failure notice|delivery failure|non-?delivery|could not be delivered|delivery has failed/i';
+
+    private const string UNDELIVERED = 'The message could not be delivered';
+
+    private const array STATUS_REASONS = [
+        '1.1' => 'The mailbox does not exist',
+        '1.2' => 'The recipient\'s domain does not exist',
+        '2.1' => 'The mailbox is disabled',
+        '2.2' => 'The mailbox is full',
+        '2.3' => 'The message is too large for the mailbox',
+        '3.4' => 'The message is too large',
+        '4.4' => 'The recipient\'s server could not be reached',
+        '4.7' => 'The message expired before it could be delivered',
+        '7.1' => 'The recipient\'s server refused the message',
+    ];
 
     /** @var array<string, true>|null */
     private static ?array $mbEncodings = null;
@@ -56,13 +82,17 @@ final class MessageReaderService
         $text = null;
         $html = null;
         $attachments = [];
-        $this->walk($this->headerFields($headerBlock), $body, 0, $text, $html, $attachments);
+        $fields = $this->headerFields($headerBlock);
+        $this->walk($fields, $body, 0, $text, $html, $attachments);
+        $headers = $this->headers($headerBlock, $fallbackMessageId, $fallbackDate);
+        $textBody = rtrim($text ?? (null === $html ? '' : $this->htmlToText($html)));
 
         return new Message(
-            $this->headers($headerBlock, $fallbackMessageId, $fallbackDate),
-            rtrim($text ?? (null === $html ? '' : $this->htmlToText($html))),
+            $headers,
+            $textBody,
             $html,
             $attachments,
+            $headers->isDeliveryReport() ? $this->deliveryFailure($fields, $body, $textBody) : null,
         );
     }
 
@@ -133,18 +163,256 @@ final class MessageReaderService
         }
 
         $from = $this->addresses($this->field($fields, 'from') ?? '');
+        $subject = $this->decodeWords($this->field($fields, 'subject') ?? '');
+
+        [$contentType, $contentTypeParameters] = $this->parameters($this->field($fields, 'content-type'), 'text/plain');
+        $isReport = 'multipart/report' === $contentType;
+        $machineSender = $this->isMachineSender($this->field($fields, 'from') ?? '');
+        $deliveryReport = ($isReport && 'delivery-status' === strtolower($contentTypeParameters['report-type'] ?? ''))
+            || ($machineSender && 1 === preg_match(self::BOUNCE_SUBJECT, $subject));
 
         return new MessageHeaders(
             $messageId,
             $from[0] ?? null,
             $this->addresses($this->field($fields, 'to') ?? ''),
             $this->addresses($this->field($fields, 'cc') ?? ''),
-            $this->decodeWords($this->field($fields, 'subject') ?? ''),
+            $subject,
             $this->date($this->field($fields, 'date')) ?? $fallbackDate,
             $this->firstId($this->field($fields, 'in-reply-to') ?? ''),
             $references,
             $authenticationResults,
+            $deliveryReport || $isReport || $machineSender || $this->hasAutomatedField($fields),
+            $deliveryReport,
         );
+    }
+
+    /**
+     * Whether the From field names mailer-daemon or postmaster, with or
+     * without a domain.
+     */
+    private function isMachineSender(string $from): bool
+    {
+        $sender = trim((string) preg_replace('/\([^)]*\)/', '', $from));
+        if (1 === preg_match('/<([^<>]*)>\s*$/', $sender, $match)) {
+            $sender = $match[1];
+        }
+
+        return \in_array(strtolower(trim(explode('@', $sender)[0])), ['mailer-daemon', 'postmaster'], true);
+    }
+
+    /**
+     * @param list<array{0: string, 1: string}> $fields
+     */
+    private function hasAutomatedField(array $fields): bool
+    {
+        foreach ($fields as [$name, $value]) {
+            $word = strtolower(trim((string) preg_replace('/\([^)]*\)/', '', explode(';', $value)[0])));
+            $automated = match ($name) {
+                'auto-submitted' => 'no' !== $word,
+                'return-path' => '<>' === (string) preg_replace('/\s+/', '', $word),
+                'precedence' => \in_array($word, ['bulk', 'junk', 'auto_reply', 'list'], true),
+                'x-autoreply', 'x-autorespond', 'x-auto-response-suppress', 'list-id', 'list-unsubscribe' => true,
+                default => false,
+            };
+            if ($automated) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The failure a delivery report describes, read from its delivery-status
+     * part; without one, from an Exim-style text. Null when the report is
+     * only about delays or deliveries.
+     *
+     * @param list<array{0: string, 1: string}> $fields
+     */
+    private function deliveryFailure(array $fields, string $body, string $text): ?DeliveryFailure
+    {
+        $status = null;
+        $returned = null;
+        foreach ($this->leaves($fields, $body, 0) as [$type, $content]) {
+            if (null === $status && \in_array($type, ['message/delivery-status', 'message/global-delivery-status'], true)) {
+                $status = $content;
+            } elseif (null === $returned && \in_array($type, ['text/rfc822-headers', 'message/rfc822', 'message/global', 'message/global-headers'], true)) {
+                $returned = $content;
+            }
+        }
+
+        $reportedId = null;
+        if (null !== $status) {
+            [$recipients, $reportedId] = $this->deliveryStatus($status);
+            if ([] === $recipients) {
+                return null;
+            }
+        } else {
+            $recipients = $this->textFailures($text);
+        }
+
+        $returnedId = null;
+        if (null !== $returned) {
+            [$returnedHeaders] = $this->split(str_replace("\r\n", "\n", $returned));
+            $returnedId = $this->firstId($this->field($this->headerFields($returnedHeaders), 'message-id') ?? '');
+        }
+
+        return new DeliveryFailure(
+            $recipients,
+            $returnedId ?? $reportedId ?? $this->quotedMessageId($text),
+            $recipients[0]->reason ?? self::UNDELIVERED,
+        );
+    }
+
+    /**
+     * Each part that is not a multipart: its type and its decoded bytes.
+     *
+     * @param list<array{0: string, 1: string}> $fields
+     *
+     * @return \Generator<int, array{0: string, 1: string}>
+     */
+    private function leaves(array $fields, string $body, int $depth): \Generator
+    {
+        [$type, $parameters] = $this->parameters($this->field($fields, 'content-type'), 'text/plain');
+        if (!str_starts_with($type, 'multipart/')) {
+            yield [$type, $this->decode($body, strtolower(trim($this->field($fields, 'content-transfer-encoding') ?? '7bit')))];
+
+            return;
+        }
+        $boundary = $parameters['boundary'] ?? '';
+        if ('' === $boundary || $depth >= self::MAX_DEPTH) {
+            return;
+        }
+        foreach ($this->bodyParts($body, $boundary) as $part) {
+            [$partHeaders, $partBody] = $this->split($part);
+            yield from $this->leaves($this->headerFields($partHeaders), $partBody, $depth + 1);
+        }
+    }
+
+    /**
+     * The failed recipients of a delivery-status part (RFC 3464) and the
+     * X-Original-Message-ID some servers add to it.
+     *
+     * @see https://www.rfc-editor.org/rfc/rfc3464#section-2
+     *
+     * @return array{0: list<FailedRecipient>, 1: ?string}
+     */
+    private function deliveryStatus(string $content): array
+    {
+        $recipients = [];
+        $originalId = null;
+        foreach (preg_split('/\n[ \t]*\n/', trim(str_replace("\r\n", "\n", $content))) ?: [] as $block) {
+            $fields = $this->headerFields($block);
+            $originalId ??= $this->firstId($this->field($fields, 'x-original-message-id') ?? '');
+            $email = $this->typedAddress($this->field($fields, 'original-recipient'))
+                ?? $this->typedAddress($this->field($fields, 'final-recipient'));
+            if (null === $email || 'failed' !== strtolower(trim($this->field($fields, 'action') ?? ''))) {
+                continue;
+            }
+            $status = 1 === preg_match('/\b[245]\.\d{1,3}\.\d{1,3}\b/', $this->field($fields, 'status') ?? '', $match) ? $match[0] : null;
+            $diagnostic = $this->field($fields, 'diagnostic-code');
+            if (null !== $diagnostic) {
+                $diagnostic = (string) preg_replace('/\s+/', ' ', $this->toUtf8($this->typedValue($diagnostic), 'utf-8'));
+                $diagnostic = '' === $diagnostic ? null : $diagnostic;
+            }
+            $recipients[] = new FailedRecipient($email, $this->failureReason($diagnostic, $status), $status, $diagnostic);
+        }
+
+        return [$recipients, $originalId];
+    }
+
+    /**
+     * The address of an "address-type; address" field.
+     */
+    private function typedAddress(?string $value): ?string
+    {
+        $address = trim($this->typedValue($value ?? ''), '<>');
+
+        return str_contains($address, '@') ? $this->toUtf8($address, 'utf-8') : null;
+    }
+
+    /**
+     * The value of a "type; value" field, without its type.
+     */
+    private function typedValue(string $value): string
+    {
+        $semicolon = strpos($value, ';');
+
+        return trim(false === $semicolon ? $value : substr($value, $semicolon + 1));
+    }
+
+    /**
+     * The failed addresses of a text bounce that lists them under "The
+     * following address(es) failed:", each followed by indented lines
+     * saying why, as Exim writes it.
+     *
+     * @return list<FailedRecipient>
+     */
+    private function textFailures(string $text): array
+    {
+        if (1 !== preg_match('/address(?:\(es\)|es)? failed:[ \t]*\n((?:[ \t]*\n|[ \t]+\S[^\n]*(?:\n|\z))*)/i', $text, $match)) {
+            return [];
+        }
+
+        $emails = [];
+        $explanations = [];
+        foreach (explode("\n", $match[1]) as $line) {
+            $line = trim($line);
+            if (1 === preg_match('/^<?([^\s<>@]+@[^\s<>@]+?)>?:?$/', $line, $address)) {
+                $emails[] = $address[1];
+                $explanations[] = '';
+            } elseif ('' !== $line && [] !== $explanations) {
+                $explanations[\count($explanations) - 1] = ltrim($explanations[\count($explanations) - 1].' '.$line);
+            }
+        }
+
+        $recipients = [];
+        foreach ($emails as $index => $email) {
+            $diagnostic = '' === $explanations[$index] ? null : $explanations[$index];
+            $status = null;
+            $reason = $diagnostic;
+            if (null !== $diagnostic) {
+                $status = 1 === preg_match('/(?<!\S)[245]\.\d{1,3}\.\d{1,3}(?!\S)/', $diagnostic, $code) ? $code[0] : null;
+                $reply = preg_match('/(?<!\S)[245]\d\d[ -]/', $diagnostic, $replyMatch, \PREG_OFFSET_CAPTURE);
+                $reason = 1 === $reply ? substr($diagnostic, $replyMatch[0][1]) : $diagnostic;
+            }
+            $recipients[] = new FailedRecipient($email, $this->failureReason($reason, $status), $status, $diagnostic);
+        }
+
+        return $recipients;
+    }
+
+    /**
+     * The Message-ID of the copy of the original a text bounce quotes, after
+     * its "copy of the message" line when there is one.
+     */
+    private function quotedMessageId(string $text): ?string
+    {
+        $start = 1 === preg_match('/^-{2,}[^\n]*copy of[^\n]*$/mi', $text, $marker, \PREG_OFFSET_CAPTURE) ? $marker[0][1] : 0;
+
+        return 1 === preg_match('/^Message-ID:\s*(<[^<>\s]+>)/mi', substr($text, $start), $match) ? $this->toUtf8($match[1], 'utf-8') : null;
+    }
+
+    /**
+     * One line saying why: the diagnostic without its reply and status
+     * codes or a leading address, else what the status code means (RFC
+     * 3463), else that the message could not be delivered.
+     *
+     * @see https://www.rfc-editor.org/rfc/rfc3463#section-3
+     */
+    private function failureReason(?string $diagnostic, ?string $status): string
+    {
+        $reason = (string) preg_replace(
+            ['/(?<!\S)[245]\d\d[ -][245]\.\d{1,3}\.\d{1,3}(?!\S)/', '/^\s*[245]\d\d(?:[ -]|$)/', '/^\s*#?[245]\.\d{1,3}\.\d{1,3}(?!\S)/', '/^\s*<[^<>]*>:?/', '/\s+/'],
+            ['', '', '', '', ' '],
+            $diagnostic ?? '',
+        );
+        $reason = trim($reason, " \t:;-");
+        if ('' !== $reason) {
+            return $reason;
+        }
+
+        return self::STATUS_REASONS[substr((string) $status, 2)] ?? self::UNDELIVERED;
     }
 
     private function firstId(string $value): ?string

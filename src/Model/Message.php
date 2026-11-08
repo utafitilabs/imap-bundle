@@ -17,6 +17,9 @@ namespace UtafitiLabs\ImapBundle\Model;
  * A read message: its headers, its text (the text/plain part, or the HTML part
  * reduced to text when there is none), its HTML when it has one, and what its
  * attachments are, without their content.
+ *
+ * $deliveryFailure is set on a delivery report that says delivery failed:
+ * which recipients of which of your messages, and why.
  */
 final readonly class Message
 {
@@ -28,6 +31,7 @@ final readonly class Message
         public string $textBody,
         public ?string $htmlBody,
         public array $attachments,
+        public ?DeliveryFailure $deliveryFailure = null,
     ) {
     }
 }

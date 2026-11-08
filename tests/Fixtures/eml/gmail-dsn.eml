@@ -1,0 +1,86 @@
+Delivered-To: answers@example.org
+Return-Path: <>
+Received: by 2002:a05:6000:1a8b:b0:3a1:2b3c:4d5e with SMTP id f11csp123456wrx;
+        Sun, 8 Nov 2026 01:22:41 -0800 (PST)
+X-Failed-Recipients: no.such.person@example.com
+Content-Type: multipart/report; boundary="00000000000062b1d70642f3a8c1"; report-type=delivery-status
+From: Mail Delivery Subsystem <mailer-daemon@mail.example.com>
+To: answers@example.org
+Auto-Submitted: auto-replied
+Message-ID: <6729d8f1.050a0220.3b2c1d.a1b2.GMR@mx.example.com>
+Date: Sun, 08 Nov 2026 01:22:41 -0800 (PST)
+Subject: Delivery Status Notification (Failure)
+References: <offer-3.9d8e7f@example.org>
+In-Reply-To: <offer-3.9d8e7f@example.org>
+
+--00000000000062b1d70642f3a8c1
+Content-Type: multipart/related; boundary="00000000000062b20c0642f3a8c8"
+
+--00000000000062b20c0642f3a8c8
+Content-Type: multipart/alternative; boundary="00000000000062b2170642f3a8c9"
+
+--00000000000062b2170642f3a8c9
+Content-Type: text/plain; charset="UTF-8"
+
+
+** Address not found **
+
+Your message wasn't delivered to no.such.person@example.com because the address couldn't be found, or is unable to receive mail.
+
+Learn more here: https://support.example.com/mail/answer/6596
+
+The response from the remote server was:
+550 5.1.1 The email account that you tried to reach does not exist. Please try double-checking the recipient's email address for typos or unnecessary spaces. For more information, go to https://support.example.com/mail/?p=NoSuchUser a1b2c3d4e5.25 - gsmtp
+
+--00000000000062b2170642f3a8c9
+Content-Type: text/html; charset="UTF-8"
+
+<html><body><h2>Address not found</h2><p>Your message wasn't delivered to <a style='color:#212121;text-decoration:none'><b>no.such.person@example.com</b></a> because the address couldn't be found, or is unable to receive mail.</p></body></html>
+
+--00000000000062b2170642f3a8c9--
+--00000000000062b20c0642f3a8c8
+Content-Type: image/png; name="icon.png"
+Content-Disposition: attachment; filename="icon.png"
+Content-Transfer-Encoding: base64
+Content-ID: <icon.png>
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--00000000000062b20c0642f3a8c8--
+--00000000000062b1d70642f3a8c1
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mail.example.com
+Received-From-MTA: dns; answers@example.org
+Arrival-Date: Sun, 08 Nov 2026 01:22:40 -0800 (PST)
+X-Original-Message-ID: <offer-3.9d8e7f@example.org>
+
+Final-Recipient: rfc822; no.such.person@example.com
+Action: failed
+Status: 5.1.1
+Remote-MTA: dns; mx.example.com. (192.0.2.40, the server for the domain
+ example.com.)
+Diagnostic-Code: smtp; 550-5.1.1 The email account that you tried to reach does not exist. Please try
+ 550-5.1.1 double-checking the recipient's email address for typos or
+ 550-5.1.1 unnecessary spaces. For more information, go to
+ 550 5.1.1  https://support.example.com/mail/?p=NoSuchUser a1b2c3d4e5.25 - gsmtp
+Last-Attempt-Date: Sun, 08 Nov 2026 01:22:41 -0800 (PST)
+
+--00000000000062b1d70642f3a8c1
+Content-Type: message/rfc822
+
+Return-Path: <answers@example.org>
+Received: from www.example.org ([198.51.100.7])
+        by mail.example.org with ESMTPSA id 5b1f17b1804b1-42f8a1b2c3dsm123456f8f.12
+        for <no.such.person@example.com>; Sun, 08 Nov 2026 01:22:39 -0800 (PST)
+Message-ID: <offer-3.9d8e7f@example.org>
+Date: Sun, 08 Nov 2026 09:22:39 +0000
+From: Answers <answers@example.org>
+To: no.such.person@example.com
+Subject: Your offer
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Here is the offer we promised.
+
+--00000000000062b1d70642f3a8c1--

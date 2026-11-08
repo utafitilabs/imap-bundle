@@ -1,0 +1,73 @@
+Return-Path: <>
+Received: from DB9PR01MB1234.eurprd01.prod.example.net (2603:10a6:10:2e5::9)
+ by AM6PR01MB5678.eurprd01.prod.example.net with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.8158.12;
+ Sun, 8 Nov 2026 09:31:03 +0000
+From: Microsoft Outlook <postmaster@example.net>
+To: <answers@example.org>
+Date: Sun, 8 Nov 2026 09:31:03 +0000
+Content-Type: multipart/report; report-type=delivery-status;
+	boundary="ac0f4b1e-2d3c-4e5f-a6b7-c8d9e0f1a2b3"
+X-MS-Exchange-Message-Is-Ndr:
+Content-Language: en-US
+Message-ID: <7b2d1e0f-4c3b-4a59-8e7d-6f5a4b3c2d1e@DB9PR01MB1234.eurprd01.prod.example.net>
+In-Reply-To: <reply-9.ffee01@example.org>
+References: <question-4@example.net> <reply-9.ffee01@example.org>
+Subject: Undeliverable: Re: Your booking request
+Auto-Submitted: auto-replied
+MIME-Version: 1.0
+
+--ac0f4b1e-2d3c-4e5f-a6b7-c8d9e0f1a2b3
+Content-Type: multipart/alternative; differences=Content-Type;
+	boundary="4d3c2b1a-0f9e-8d7c-6b5a-493827161504"
+
+--4d3c2b1a-0f9e-8d7c-6b5a-493827161504
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+Your message to Former.Colleague@example.net couldn't be delivered.
+Former.Colleague wasn't found at example.net.
+answers Office 365 Former.Colleague
+Action Required Recipient
+Unknown To address
+
+How to Fix It
+The address may be misspelled or may not exist. Try one or more of the fol=
+lowing:
+
+--4d3c2b1a-0f9e-8d7c-6b5a-493827161504
+Content-Type: text/html; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p>Your message to <b>Former.Colleague@example.net</b> couldn't be delivered.</p></body></html>
+
+--4d3c2b1a-0f9e-8d7c-6b5a-493827161504--
+
+--ac0f4b1e-2d3c-4e5f-a6b7-c8d9e0f1a2b3
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns;DB9PR01MB1234.eurprd01.prod.example.net
+Received-From-MTA: dns;mail.example.org
+Arrival-Date: Sun, 8 Nov 2026 09:31:02 +0000
+
+Original-Recipient: rfc822;Former.Colleague@example.net
+Final-Recipient: rfc822;Former.Colleague@example.net
+Action: failed
+Status: 5.1.10
+Diagnostic-Code: smtp;550 5.1.10 RESOLVER.ADR.RecipientNotFound; Recipient not found by SMTP address lookup
+
+--ac0f4b1e-2d3c-4e5f-a6b7-c8d9e0f1a2b3
+Content-Type: text/rfc822-headers
+
+Return-Path: <answers@example.org>
+Received: from mail.example.org (203.0.113.9) by
+ DB9PR01MB1234.eurprd01.prod.example.net (10.167.8.4) with Microsoft SMTP
+ Server id 15.20.8158.12; Sun, 8 Nov 2026 09:31:02 +0000
+Message-ID: <reply-9.ffee01@example.org>
+In-Reply-To: <question-4@example.net>
+From: Answers <answers@example.org>
+To: Former.Colleague@example.net
+Subject: Re: Your booking request
+Date: Sun, 08 Nov 2026 09:31:01 +0000
+
+--ac0f4b1e-2d3c-4e5f-a6b7-c8d9e0f1a2b3--

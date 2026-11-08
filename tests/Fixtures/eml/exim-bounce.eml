@@ -1,0 +1,46 @@
+Return-path: <>
+Envelope-to: answers@example.org
+Delivery-date: Sun, 08 Nov 2026 10:14:03 +0100
+Received: from mail by mail.example.org with local (Exim 4.97)
+	id 1vHq3t-0004Zk-1a
+	for answers@example.org; Sun, 08 Nov 2026 10:14:03 +0100
+X-Failed-Recipients: nobody@example.net, gone@example.com
+Auto-Submitted: auto-replied
+From: Mail Delivery System <Mailer-Daemon@mail.example.org>
+To: answers@example.org
+Content-Type: text/plain; charset=us-ascii
+Subject: Mail delivery failed: returning message to sender
+Message-Id: <E1vHq3t-0004Zk-1a@mail.example.org>
+Date: Sun, 08 Nov 2026 10:14:03 +0100
+
+This message was created automatically by mail delivery software.
+
+A message that you sent could not be delivered to one or more of its
+recipients. This is a permanent error. The following address(es) failed:
+
+  nobody@example.net
+    Unrouteable address
+  gone@example.com
+    host mx.example.com [192.0.2.25]
+    SMTP error from remote mail server after RCPT TO:<gone@example.com>:
+    550 5.1.1 <gone@example.com>: Recipient address rejected: User unknown in local recipient table
+
+------ This is a copy of the message, including all the headers. ------
+
+Return-path: <answers@example.org>
+Received: from [198.51.100.7] (helo=www.example.org)
+	by mail.example.org with esmtpsa (TLS1.3) tls TLS_AES_256_GCM_SHA384
+	(Exim 4.97)
+	(envelope-from <answers@example.org>)
+	id 1vHq3s-0004Zg-2b;
+	Sun, 08 Nov 2026 10:14:02 +0100
+Message-ID: <confirmation-41.7f3a9c@example.org>
+Date: Sun, 08 Nov 2026 09:14:02 +0000
+From: Answers <answers@example.org>
+To: nobody@example.net, gone@example.com
+Subject: We have your request
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Thank you for writing. We will answer within a day.
