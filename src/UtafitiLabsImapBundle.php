@@ -21,6 +21,7 @@ use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigura
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use UtafitiLabs\ImapBundle\Command\WatchMailboxCommand;
 use UtafitiLabs\ImapBundle\Factory\ImapClientFactory;
+use UtafitiLabs\ImapBundle\Service\MailboxDsnParser;
 use UtafitiLabs\ImapBundle\Service\MailboxWatcherService;
 use UtafitiLabs\ImapBundle\Service\MessageReaderService;
 use UtafitiLabs\ImapBundle\Service\QuotedReplyStripperService;
@@ -94,8 +95,10 @@ final class UtafitiLabsImapBundle extends AbstractBundle
         $services->set('utafitilabs_imap.quoted_reply_stripper', QuotedReplyStripperService::class);
         $services->alias(QuotedReplyStripperService::class, 'utafitilabs_imap.quoted_reply_stripper');
 
+        $services->set('.utafitilabs_imap.dsn_parser', MailboxDsnParser::class);
+
         $services->set('.utafitilabs_imap.client_factory', ImapClientFactory::class)
-            ->args([service('.utafitilabs_imap.clock')]);
+            ->args([service('.utafitilabs_imap.clock'), service('.utafitilabs_imap.dsn_parser')]);
 
         $services->set('utafitilabs_imap.mailbox_watcher', MailboxWatcherService::class)
             ->args([

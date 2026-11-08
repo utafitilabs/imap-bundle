@@ -17,21 +17,17 @@ use Psr\Clock\ClockInterface;
 use UtafitiLabs\ImapBundle\Client\ImapClient;
 use UtafitiLabs\ImapBundle\Client\ImapClientInterface;
 use UtafitiLabs\ImapBundle\Client\StreamSocketTransport;
-use UtafitiLabs\ImapBundle\Exception\InvalidMailboxDsnException;
-use UtafitiLabs\ImapBundle\Model\MailboxDsn;
+use UtafitiLabs\ImapBundle\Service\MailboxDsnParser;
 
 /**
- * Makes clients over the TLS socket transport from a mailbox DSN:
- * imaps://user:password@host[:993] for TLS from the first byte, or
- * imap://user:password@host[:143] for STARTTLS. User and password are
- * URL-encoded.
+ * Makes clients over the TLS socket transport from a mailbox DSN, read by
+ * {@see MailboxDsnParser}.
  */
 final class ImapClientFactory implements ImapClientFactoryInterface
 {
-    private const array SCHEMES = ['imaps' => [993, true], 'imap' => [143, false]];
-
     public function __construct(
         private readonly ClockInterface $clock,
+        private readonly MailboxDsnParser $dsns = new MailboxDsnParser(),
         private readonly ?string $caFile = null,
         private readonly float $commandTimeout = 60.0,
     ) {
@@ -41,32 +37,10 @@ final class ImapClientFactory implements ImapClientFactoryInterface
     {
         return new ImapClient(
             new StreamSocketTransport($this->caFile),
-            $this->parseDsn($dsn),
+            $this->dsns->parse($dsn),
             $this->clock,
             $maxMessageBytes + 65536,
             $this->commandTimeout,
         );
-    }
-
-    /**
-     * @throws InvalidMailboxDsnException
-     */
-    public function parseDsn(#[\SensitiveParameter] string $dsn): MailboxDsn
-    {
-        $parts = parse_url($dsn);
-        $scheme = strtolower($parts['scheme'] ?? '');
-        if (!isset(self::SCHEMES[$scheme])) {
-            throw new InvalidMailboxDsnException('A mailbox DSN starts with imaps:// or imap://.');
-        }
-        if ('' === ($parts['host'] ?? '')) {
-            throw new InvalidMailboxDsnException('The mailbox DSN names no host.');
-        }
-        $user = rawurldecode($parts['user'] ?? '');
-        if ('' === $user) {
-            throw new InvalidMailboxDsnException('The mailbox DSN names no user.');
-        }
-        [$defaultPort, $implicitTls] = self::SCHEMES[$scheme];
-
-        return new MailboxDsn($parts['host'], $parts['port'] ?? $defaultPort, $implicitTls, $user, rawurldecode($parts['pass'] ?? ''));
     }
 }
