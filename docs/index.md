@@ -18,6 +18,7 @@ Written on PHP built-ins and Symfony components only.
   - [Logs](#logs)
 - [Reading messages](#reading-messages)
   - [The models](#the-models)
+  - [Automated mail and bounces](#automated-mail-and-bounces)
   - [Stripping quoted mail](#stripping-quoted-mail)
 - [Security](#security)
 - [Providers](#providers)
@@ -107,7 +108,9 @@ interface IncomingMailHandlerInterface
 
 For each message the watcher first fetches only its identifying header fields
 (Message-ID, From, To, Cc, Subject, Date, In-Reply-To, References,
-Authentication-Results) and its size, and asks `wants()`. Only when the handler says yes is
+Authentication-Results), the fields that tell automated mail apart (Content-Type,
+Return-Path, Auto-Submitted, X-Autoreply, X-Autorespond, X-Auto-Response-Suppress,
+Precedence, List-Id, List-Unsubscribe) and its size, and asks `wants()`. Only when the handler says yes is
 the whole message fetched, read and passed to `handle()`. An application that takes every
 message returns `true`.
 
@@ -115,6 +118,11 @@ message returns `true`.
 offers the last `catch_up_days` of mail again on every connect, so the handler keeps its
 own record of Message-IDs it has seen. A message without a Message-ID gets a stable one
 made from its UIDVALIDITY and UID (`<1730000000.4101@replies.imap.invalid>`).
+
+A handler that takes replies declines what a machine sent with
+`$headers->isAutomated()`, and lets bounces through with `$headers->isDeliveryReport()`
+when it wants to know which of its messages failed — see
+[Automated mail and bounces](#automated-mail-and-bounces).
 
 An exception thrown by `wants()` or `handle()` is logged with the message's UID and
 Message-ID, and the watcher goes on with the next message; the failed message is offered
@@ -184,13 +192,56 @@ to UTF-8 (ISO-8859-1 as Windows-1252, an unknown charset by best effort), joins
 
 | Model | Properties |
 |---|---|
-| `Message` | `headers`, `textBody` (the text/plain part, or the HTML part reduced to text), `htmlBody` (`?string`), `attachments` (`list<Attachment>`) |
-| `MessageHeaders` | `messageId`, `from` (`?Address`), `to`, `cc` (`list<Address>`), `subject`, `date` (`?DateTimeImmutable`), `inReplyTo`, `references`, `authenticationResults` (`list<string>`) |
+| `Message` | `headers`, `textBody` (the text/plain part, or the HTML part reduced to text), `htmlBody` (`?string`), `attachments` (`list<Attachment>`), `deliveryFailure` (`?DeliveryFailure`) |
+| `MessageHeaders` | `messageId`, `from` (`?Address`), `to`, `cc` (`list<Address>`), `subject`, `date` (`?DateTimeImmutable`), `inReplyTo`, `references`, `authenticationResults` (`list<string>`); `isAutomated()`, `isDeliveryReport()` |
 | `Address` | `email`, `name` (`?string`) |
 | `Attachment` | `filename` (`?string`), `contentType`, `size` (decoded bytes) |
+| `DeliveryFailure` | `recipients` (`list<FailedRecipient>`), `originalMessageId` (`?string`), `reason` |
+| `FailedRecipient` | `email`, `reason`, `status` (`?string`, such as `5.1.1`), `diagnosticCode` (`?string`) |
 
 All are read-only. An attachment's content is never decoded into memory; its size is
 counted from the encoded part.
+
+### Automated mail and bounces
+
+`MessageHeaders::isAutomated()` is true when any of these says a machine sent the message:
+
+| Signal | Source |
+|---|---|
+| `Auto-Submitted` present and not `no` | [RFC 3834](https://www.rfc-editor.org/rfc/rfc3834) |
+| `Content-Type: multipart/report` (bounces, read receipts) | [RFC 6522](https://www.rfc-editor.org/rfc/rfc6522) |
+| `Return-Path: <>` (the null sender of bounces and auto-replies) | [RFC 5321](https://www.rfc-editor.org/rfc/rfc5321) |
+| From `mailer-daemon` or `postmaster`, any case, with or without a domain | convention |
+| `X-Autoreply`, `X-Autorespond`; `X-Auto-Response-Suppress` (Microsoft) | convention |
+| `Precedence: bulk`, `junk`, `auto_reply` or `list` | convention |
+| `List-Id` or `List-Unsubscribe` (a mailing list is not a person) | [RFC 2919](https://www.rfc-editor.org/rfc/rfc2919), [RFC 2369](https://www.rfc-editor.org/rfc/rfc2369) |
+
+`MessageHeaders::isDeliveryReport()` is true for a `multipart/report` with
+`report-type=delivery-status` ([RFC 3464](https://www.rfc-editor.org/rfc/rfc3464)), and
+for a mailer-daemon or postmaster sender whose subject reads like a bounce ("Mail delivery
+failed", "Undelivered Mail Returned to Sender", "Delivery Status Notification (Failure)",
+"Undeliverable", "failure notice", "Returned mail"). A delivery report is always
+automated; a read receipt or an out-of-office reply is automated but not a delivery report.
+
+A delivery report that says delivery failed is read into `Message::$deliveryFailure`:
+
+1. **Recipients.** From the `message/delivery-status` part, each recipient with
+   `Action: failed`, by its `Original-Recipient` (the address you sent to) or else its
+   `Final-Recipient`, with its `Status` and `Diagnostic-Code`. Without that part, as Exim
+   often sends, from the addresses listed under "The following address(es) failed:" and
+   the indented lines below each.
+2. **The original Message-ID.** From the returned `text/rfc822-headers` or
+   `message/rfc822` part, else the `X-Original-Message-ID` some servers put in the
+   delivery status, else the `Message-ID:` line of the copy quoted in the text.
+3. **The reason.** The diagnostic without its SMTP reply and status codes ("Recipient
+   address rejected: User unknown in virtual mailbox table", "Unrouteable address"), else
+   what the status code means (`5.1.1` "The mailbox does not exist", `5.1.2`, `5.2.2` "The
+   mailbox is full", `5.7.1` "The recipient's server refused the message", …), else "The
+   message could not be delivered". `DeliveryFailure::$reason` is the first recipient's.
+
+A report whose delivery-status part names no failed recipient (a delay, a delivery)
+carries no `DeliveryFailure`; a text bounce whose addresses cannot be read carries one
+with no recipients.
 
 ### Stripping quoted mail
 

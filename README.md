@@ -20,6 +20,7 @@ command.
 - [Why](#why)
 - [Install](#install)
 - [A taste](#a-taste)
+- [Automated mail and bounces](#automated-mail-and-bounces)
 - [Documentation](#documentation)
 - [Requirements](#requirements)
 - [Compatibility](#compatibility)
@@ -115,12 +116,67 @@ The process catches up on the last three days, then waits with IDLE and hands ov
 new message within seconds; it reconnects with a doubling delay after any network error
 and stops cleanly on SIGTERM or Ctrl+C.
 
-Models: `Message` (headers, `textBody`, `htmlBody`, `attachments`), `MessageHeaders`
-(Message-ID, from, to, cc, subject, date, In-Reply-To, References,
-`authenticationResults`), `Address`, `Attachment` (file name, type, size — never the
-content). Services: `MessageReaderService` (raw RFC 822 → `Message`),
+Models: `Message` (headers, `textBody`, `htmlBody`, `attachments`, `deliveryFailure`),
+`MessageHeaders` (Message-ID, from, to, cc, subject, date, In-Reply-To, References,
+`authenticationResults`, `isAutomated()`, `isDeliveryReport()`), `Address`, `Attachment`
+(file name, type, size — never the content), `DeliveryFailure` and `FailedRecipient`. Services: `MessageReaderService` (raw RFC 822 → `Message`),
 `QuotedReplyStripperService` (Gmail, Outlook, Apple Mail, Yahoo and Thunderbird quote
 forms), `MailboxWatcherService`.
+
+## Automated mail and bounces
+
+A mailbox that receives replies also receives what machines send back: bounces from
+mailer-daemon, out-of-office replies, mailing lists. A bounce often carries your own
+message's Message-ID in In-Reply-To, so a handler that matches replies by thread files it
+as an answer unless it asks first. Two checks on the headers tell such mail apart, before
+the body is fetched:
+
+- `MessageHeaders::isAutomated()` — a machine sent it: `Auto-Submitted` other than `no`
+  ([RFC 3834](https://www.rfc-editor.org/rfc/rfc3834)), a `multipart/report`
+  ([RFC 6522](https://www.rfc-editor.org/rfc/rfc6522)), an empty `Return-Path: <>`, a
+  mailer-daemon or postmaster sender, `X-Autoreply`, `X-Autorespond` or
+  `X-Auto-Response-Suppress`, `Precedence: bulk | junk | auto_reply | list`, or a mailing
+  list's `List-Id` or `List-Unsubscribe`.
+- `MessageHeaders::isDeliveryReport()` — it reports on the delivery of another message: a
+  `multipart/report` of `report-type=delivery-status`
+  ([RFC 3464](https://www.rfc-editor.org/rfc/rfc3464)), or a mailer-daemon or postmaster
+  sender with a subject such as "Mail delivery failed" or "Undelivered Mail Returned to
+  Sender". Every delivery report is also automated.
+
+When a delivery report says delivery failed, the read message carries a
+`DeliveryFailure`: the `FailedRecipient`s (address, one-line `reason`, `status` such as
+`5.1.1`, the servers' `diagnosticCode`), the `originalMessageId` of the message that came
+back, and the first recipient's `reason`. It is read from the report's delivery-status
+part, or from the "address(es) failed" list of an Exim text bounce; a report about a delay
+carries none.
+
+```php
+public function wants(MessageHeaders $headers): bool
+{
+    if ($headers->isDeliveryReport()) {
+        return true;                       // read it, to learn which message bounced
+    }
+
+    return !$headers->isAutomated() && !$this->replies->has($headers->messageId);
+}
+
+public function handle(Message $message): void
+{
+    if ($message->headers->isDeliveryReport()) {
+        $failure = $message->deliveryFailure;
+        $sentId = $failure?->originalMessageId;
+        if (null !== $failure && null !== $sentId && $this->sent->has($sentId)) {
+            foreach ($failure->recipients as $recipient) {
+                $this->sent->markUndelivered($sentId, $recipient->email, $recipient->reason);
+            }
+        }
+
+        return;                            // a bounce is never an answer
+    }
+
+    $this->replies->add($message->headers->messageId, $message->headers->from?->email, $message->textBody);
+}
+```
 
 ## Documentation
 
