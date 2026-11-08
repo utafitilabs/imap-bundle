@@ -11,12 +11,13 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-// Usage: php tls-server.php <implicit|starttls> <cert+key.pem> <port-file>
+// Usage: php tls-server.php <implicit|starttls|inject|no-handshake|close> <cert+key.pem> <port-file>
 
 [, $mode, $certificate, $portFile] = $argv;
 
 $context = stream_context_create(['ssl' => ['local_cert' => $certificate, 'verify_peer' => false]]);
-$server = stream_socket_server(('starttls' === $mode ? 'tcp' : 'ssl').'://127.0.0.1:0', $errno, $errstr, \STREAM_SERVER_BIND | \STREAM_SERVER_LISTEN, $context);
+$plain = in_array($mode, ['starttls', 'inject', 'no-handshake'], true);
+$server = stream_socket_server(($plain ? 'tcp' : 'ssl').'://127.0.0.1:0', $errno, $errstr, \STREAM_SERVER_BIND | \STREAM_SERVER_LISTEN, $context);
 if (false === $server) {
     fwrite(\STDERR, $errstr);
     exit(1);
@@ -27,10 +28,18 @@ $connection = @stream_socket_accept($server, 10);
 if (false === $connection) {
     exit(0);
 }
-if ('starttls' === $mode) {
+if ('close' === $mode) {
+    fclose($connection);
+    exit(0);
+}
+if ($plain) {
     fwrite($connection, "* OK [CAPABILITY IMAP4rev1 STARTTLS] plain ready\r\n");
     fgets($connection);
-    fwrite($connection, "A0001 OK Begin TLS negotiation now.\r\n");
+    fwrite($connection, "A0001 OK Begin TLS negotiation now.\r\n".('inject' === $mode ? "* 1 EXISTS\r\n" : ''));
+    if ('no-handshake' === $mode) {
+        fclose($connection);
+        exit(0);
+    }
     if (true !== @stream_socket_enable_crypto($connection, true, \STREAM_CRYPTO_METHOD_TLS_SERVER)) {
         exit(0);
     }

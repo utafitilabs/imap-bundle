@@ -124,11 +124,61 @@ final class StreamSocketTransportTest extends TestCase
         self::assertSame("* OK [CAPABILITY IMAP4rev1] test ready\r\n", $transport->readLine(5.0, 1024));
     }
 
+    public function testItRefusesPlainBytesSentBeforeTheTlsHandshake(): void
+    {
+        $transport = $this->plainUpgradeTo('inject');
+
+        $this->expectException(ImapConnectionException::class);
+        $this->expectExceptionMessage('before the TLS handshake');
+        $transport->enableTls(5.0);
+    }
+
+    public function testAFailedHandshakeAfterStarttlsIsAConnectionError(): void
+    {
+        $transport = $this->plainUpgradeTo('no-handshake');
+
+        $this->expectException(ImapConnectionException::class);
+        $this->expectExceptionMessage('TLS handshake after STARTTLS failed');
+        $transport->enableTls(5.0);
+    }
+
+    public function testAConnectionTheServerClosesIsAConnectionError(): void
+    {
+        $port = $this->startServer('close');
+        $transport = new StreamSocketTransport(self::$directory.'/ca.pem');
+        $transport->connect('localhost', $port, true, 5.0);
+
+        $this->expectException(ImapConnectionException::class);
+        $this->expectExceptionMessage('closed the connection');
+        $transport->readLine(5.0, 1024);
+    }
+
+    public function testAClosedTransportRefusesToWrite(): void
+    {
+        $this->expectException(ImapConnectionException::class);
+        $this->expectExceptionMessage('not open');
+
+        (new StreamSocketTransport())->write("A0001 NOOP\r\n", 1.0);
+    }
+
     public function testAConnectionToAClosedPortFails(): void
     {
         $this->expectException(ImapConnectionException::class);
 
         (new StreamSocketTransport())->connect('127.0.0.1', 1, true, 1.0);
+    }
+
+    private function plainUpgradeTo(string $mode): StreamSocketTransport
+    {
+        $port = $this->startServer($mode);
+        $transport = new StreamSocketTransport(self::$directory.'/ca.pem');
+        $transport->connect('localhost', $port, false, 5.0);
+        $transport->readLine(5.0, 1024);
+        $transport->write("A0001 STARTTLS\r\n", 5.0);
+        $transport->readLine(5.0, 1024);
+        usleep(100000);
+
+        return $transport;
     }
 
     private function startServer(string $mode): int

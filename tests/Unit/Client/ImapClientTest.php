@@ -18,6 +18,7 @@ use Symfony\Component\Clock\MockClock;
 use UtafitiLabs\ImapBundle\Client\ImapClient;
 use UtafitiLabs\ImapBundle\Exception\ImapCommandFailedException;
 use UtafitiLabs\ImapBundle\Exception\ImapConnectionException;
+use UtafitiLabs\ImapBundle\Exception\ImapProtocolException;
 use UtafitiLabs\ImapBundle\Model\MailboxDsn;
 use UtafitiLabs\ImapBundle\Tests\Double\ScriptedTransport;
 
@@ -331,6 +332,114 @@ final class ImapClientTest extends TestCase
         $this->expectException(ImapConnectionException::class);
         $this->expectExceptionMessage('NOOP timed out');
         $client->noop();
+    }
+
+    public function testAPlainLoginAnsweringASecondChallengeCancels(): void
+    {
+        $transport = $this->track(new ScriptedTransport($this->clock, [
+            ['S', "* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN] ready\r\n"],
+            ['C', "A0001 AUTHENTICATE PLAIN\r\n"],
+            ['S', "+ \r\n"],
+            ['C', base64_encode("\0user\0secret")."\r\n"],
+            ['S', "+ more?\r\n"],
+            ['C', "*\r\n"],
+            ['S', "A0001 BAD Authentication aborted\r\n"],
+        ]));
+
+        $this->expectException(ImapCommandFailedException::class);
+        $this->expectExceptionMessage('AUTHENTICATE failed: BAD Authentication aborted');
+
+        $this->client($transport, $this->dsn())->open();
+    }
+
+    public function testAContinuationNobodyAskedForIsAProtocolError(): void
+    {
+        $transport = $this->track($this->loggedIn([
+            ['C', "A0002 NOOP\r\n"],
+            ['S', "+ surprise\r\n"],
+        ]));
+        $client = $this->openClient($transport);
+
+        $this->expectException(ImapProtocolException::class);
+        $client->noop();
+    }
+
+    public function testAnAnswerWithAnotherTagIsAProtocolError(): void
+    {
+        $transport = $this->track($this->loggedIn([
+            ['C', "A0002 NOOP\r\n"],
+            ['S', "A0009 OK what\r\n"],
+        ]));
+        $client = $this->openClient($transport);
+
+        $this->expectException(ImapProtocolException::class);
+        $client->noop();
+    }
+
+    public function testARefusedIdleIsACommandFailure(): void
+    {
+        $transport = $this->track($this->loggedIn([
+            ['C', "A0002 IDLE\r\n"],
+            ['S', "A0002 BAD Unknown command\r\n"],
+        ]));
+        $client = $this->openClient($transport);
+
+        $this->expectException(ImapCommandFailedException::class);
+        $client->idle(60, static fn (): bool => false);
+    }
+
+    public function testIdleOnAServerWithoutIdleIsRefusedBeforeSendingIt(): void
+    {
+        $transport = $this->track(new ScriptedTransport($this->clock, [
+            ['S', "* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR] ready\r\n"],
+            ['C', 'A0001 AUTHENTICATE PLAIN '.base64_encode("\0user\0secret")."\r\n"],
+            ['S', "A0001 OK [CAPABILITY IMAP4rev1] Logged in\r\n"],
+        ]));
+        $client = $this->openClient($transport);
+
+        $this->expectException(ImapProtocolException::class);
+        $client->idle(60, static fn (): bool => false);
+    }
+
+    public function testALogoutOnABrokenConnectionStillCloses(): void
+    {
+        $transport = $this->track($this->loggedIn([
+            ['C', "A0002 LOGOUT\r\n"],
+            ['EOF'],
+        ]));
+        $client = $this->openClient($transport);
+
+        $client->logout();
+
+        self::assertTrue($transport->closed);
+    }
+
+    public function testAGreetingThatIsNoGreetingIsRefused(): void
+    {
+        $transport = $this->track(new ScriptedTransport($this->clock, [['S', "A0001 OK hello\r\n"]]));
+
+        $this->expectException(ImapConnectionException::class);
+        $this->client($transport, $this->dsn())->open();
+    }
+
+    public function testASilentServerSendsNoGreeting(): void
+    {
+        $transport = $this->track(new ScriptedTransport($this->clock, [['C', 'never']]));
+
+        $this->expectException(ImapConnectionException::class);
+        $this->expectExceptionMessage('no greeting');
+        $this->client($transport, $this->dsn())->open();
+    }
+
+    public function testALineBreakInAFolderNameCannotInjectACommand(): void
+    {
+        $client = $this->openClient($this->track($this->loggedIn([
+            ['C', "A0002 EXAMINE \"Replies&AA0ACg-A0003 DELETE INBOX\"\r\n"],
+            ['S', "A0002 NO Mailbox doesn't exist\r\n"],
+        ])));
+
+        $this->expectException(ImapCommandFailedException::class);
+        $client->examine("Replies\r\nA0003 DELETE INBOX");
     }
 
     public function testTheClientOffersNoMethodThatWritesToTheMailbox(): void
