@@ -60,7 +60,8 @@ interface ImapClientInterface
     public function searchUidsFrom(int $uid): array;
 
     /**
-     * The identifying header fields and the size of each message, in UID order.
+     * The identifying header fields, those that tell automated mail apart, and
+     * the size of each message, in UID order.
      *
      * @param list<int> $uids
      *
