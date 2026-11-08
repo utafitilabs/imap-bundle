@@ -2,13 +2,13 @@ From: "Doe, John" <john@example.net>
 To: "answers@example.org" <answers@example.org>, Mary Roe
  <mary@example.net>
 CC: =?iso-8859-1?Q?Ren=E9e_Roe?= <renee@example.net>
-Subject: RE: Your enquiry
-Thread-Topic: Your enquiry
+Subject: RE: Your question
+Thread-Topic: Your question
 Date: Sun, 8 Nov 2026 10:02:11 +0000
 Message-ID:
  <DB9PR01MB1234ABCD@DB9PR01MB1234.eurprd01.prod.example.net>
-References: <enquiry-12@example.org>
-In-Reply-To: <enquiry-12@example.org>
+References: <question-12@example.org>
+In-Reply-To: <question-12@example.org>
 Content-Language: en-GB
 Content-Type: multipart/alternative;
 	boundary="_000_DB9PR01MB1234ABCD_"
@@ -28,7 +28,7 @@ John
 From: Answers <answers@example.org>
 Sent: 07 November 2026 16:12
 To: Doe, John <john@example.net>
-Subject: Your enquiry
+Subject: Your question
 
 Dear John,
 Our offer is =80450 per person.

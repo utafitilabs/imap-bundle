@@ -3,9 +3,9 @@ From: Sam Poe <sam_poe@example.com>
 Reply-To: Sam Poe <sam_poe@example.com>
 To: Answers <answers@example.org>
 Message-ID: <1234567890.987654.1762593344123@mail.example.com>
-In-Reply-To: <enquiry-15@example.org>
-References: <enquiry-15@example.org>
-Subject: Re: Your enquiry
+In-Reply-To: <question-15@example.org>
+References: <question-15@example.org>
+Subject: Re: Your question
 MIME-Version: 1.0
 Content-Type: multipart/alternative; 
 	boundary="----=_Part_987654_1234567890.1762593344122"

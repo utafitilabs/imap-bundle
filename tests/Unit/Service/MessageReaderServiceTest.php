@@ -39,11 +39,11 @@ final class MessageReaderServiceTest extends TestCase
         self::assertSame('<CAF3x9q=reply1@mail.example.com>', $headers->messageId);
         self::assertEquals(new Address('jane@example.com', 'Jane Doe'), $headers->from);
         self::assertEquals([new Address('answers@example.org', 'Answers')], $headers->to);
-        self::assertSame('Re: Your enquiry about the northern circuit', $headers->subject);
+        self::assertSame('Re: Your question about the March workshop', $headers->subject);
         self::assertSame('2026-11-08T12:58:00+03:00', $headers->date?->format(\DATE_ATOM));
-        self::assertSame('<enquiry-12@example.org>', $headers->inReplyTo);
-        self::assertSame(['<enquiry-12@example.org>', '<enquiry-12-ack@example.org>'], $headers->references);
-        self::assertStringStartsWith("Yes, the 14th works for us — two adults.\n\nThanks,\nJane\n\nOn Fri, Nov 7, 2026 at 4:12\u{202F}PM Answers", $message->textBody);
+        self::assertSame('<question-12@example.org>', $headers->inReplyTo);
+        self::assertSame(['<question-12@example.org>', '<question-12-ack@example.org>'], $headers->references);
+        self::assertStringStartsWith("Yes, the 14th works for us — two people.\n\nThanks,\nJane\n\nOn Fri, Nov 7, 2026 at 4:12\u{202F}PM Answers", $message->textBody);
         self::assertStringContainsString('<div class="gmail_quote">', (string) $message->htmlBody);
         self::assertSame([], $message->attachments);
     }
@@ -58,7 +58,7 @@ final class MessageReaderServiceTest extends TestCase
         self::assertEquals(new Address('john@example.net', 'Doe, John'), $headers->from);
         self::assertEquals([new Address('answers@example.org', 'answers@example.org'), new Address('mary@example.net', 'Mary Roe')], $headers->to);
         self::assertEquals([new Address('renee@example.net', 'Renée Roe')], $headers->cc);
-        self::assertSame('RE: Your enquiry', $headers->subject);
+        self::assertSame('RE: Your question', $headers->subject);
         self::assertStringContainsString('The price of €450 per person is fine. We’ll pay the deposit on Monday.', $message->textBody);
         self::assertStringContainsString("\nFrom: Answers <answers@example.org>\nSent: 07 November 2026 16:12", $message->textBody);
     }
@@ -71,7 +71,7 @@ final class MessageReaderServiceTest extends TestCase
         self::assertSame('<5F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0@example.com>', $message->headers->messageId);
         self::assertEquals([new Address('pat@example.com', 'Pat Lee')], $message->headers->cc);
         self::assertEquals([new Address('answers@example.org', null)], $message->headers->to);
-        self::assertStringStartsWith("Sounds wonderful, we’ll take the lodge.\n\nKim\n\n> On 7 Nov 2026, at 17:20,", $message->textBody);
+        self::assertStringStartsWith("Sounds wonderful, we’ll take the larger room.\n\nKim\n\n> On 7 Nov 2026, at 17:20,", $message->textBody);
         self::assertNull($message->htmlBody);
     }
 
@@ -98,7 +98,7 @@ final class MessageReaderServiceTest extends TestCase
     #[DataProvider('lineEndings')]
     public function testBase64Utf8(string $eol): void
     {
-        self::assertSame("Habari! Karibu sana — 東京 ✓\nAsante.", $this->fixture('base64-utf8', $eol)->textBody);
+        self::assertSame("Hello! Grüße — 東京 ✓\nThanks.", $this->fixture('base64-utf8', $eol)->textBody);
     }
 
     #[DataProvider('lineEndings')]
@@ -129,8 +129,8 @@ final class MessageReaderServiceTest extends TestCase
     {
         $message = $this->fixture('html-only', $eol);
 
-        self::assertSame("Booking confirmed\n\nDear Jane,\nyour room is reserved & paid.\n\n- Arrival: 14 Nov\n- Nights: 3", $message->textBody);
-        self::assertStringContainsString('<h1>Booking   confirmed</h1>', (string) $message->htmlBody);
+        self::assertSame("Order confirmed\n\nDear Jane,\nyour order is packed & paid.\n\n- Delivery: 14 Nov\n- Parcels: 3", $message->textBody);
+        self::assertStringContainsString('<h1>Order   confirmed</h1>', (string) $message->htmlBody);
     }
 
     public function testItReadsTheFetchedHeaderFieldsWithTheAuthenticationVerdicts(): void

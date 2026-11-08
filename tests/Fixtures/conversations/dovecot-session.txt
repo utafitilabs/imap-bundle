@@ -16,13 +16,13 @@ C: A0003 UID SEARCH SINCE 5-Nov-2026
 S: * SEARCH 4101 4102
 S: A0003 OK Search completed (0.001 + 0.000 secs).
 C: A0004 UID FETCH 4101,4102 (UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)])
-S: * 1 FETCH (UID 4101 RFC822.SIZE 2876 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {357}
+S: * 1 FETCH (UID 4101 RFC822.SIZE 2876 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {359}
 S: Message-ID: <reply-1@mail.example.com>
 S: From: Jane Doe <jane@example.com>
 S: To: answers@example.org
-S: Subject: Re: Your enquiry
-S: Date: Sat, 08 Nov 2026 09:58:00 +0000
-S: In-Reply-To: <enquiry-12@example.org>
+S: Subject: Re: Your question
+S: Date: Sun, 08 Nov 2026 09:58:00 +0000
+S: In-Reply-To: <question-12@example.org>
 S: Authentication-Results: mx.example.org;
 S:  dkim=pass header.d=example.com;
 S:  spf=pass smtp.mailfrom=example.com;
@@ -34,18 +34,18 @@ S: Message-ID: <newsletter-77@lists.example.net>
 S: From: News <news@lists.example.net>
 S: To: answers@example.org
 S: Subject: Weekly digest
-S: Date: Sat, 08 Nov 2026 09:59:00 +0000
+S: Date: Sun, 08 Nov 2026 09:59:00 +0000
 S: 
 S: )
 S: A0004 OK Fetch completed (0.001 + 0.000 secs).
 C: A0005 UID FETCH 4101 (UID RFC822.SIZE INTERNALDATE BODY.PEEK[])
-S: * 1 FETCH (UID 4101 RFC822.SIZE 277 INTERNALDATE "08-Nov-2026 09:58:03 +0000" BODY[] {277}
+S: * 1 FETCH (UID 4101 RFC822.SIZE 279 INTERNALDATE "08-Nov-2026 09:58:03 +0000" BODY[] {279}
 S: Message-ID: <reply-1@mail.example.com>
 S: From: Jane Doe <jane@example.com>
 S: To: answers@example.org
-S: Subject: Re: Your enquiry
-S: Date: Sat, 08 Nov 2026 09:58:00 +0000
-S: In-Reply-To: <enquiry-12@example.org>
+S: Subject: Re: Your question
+S: Date: Sun, 08 Nov 2026 09:58:00 +0000
+S: In-Reply-To: <question-12@example.org>
 S: Content-Type: text/plain; charset=utf-8
 S: 
 S: Yes, the 14th works for us.
@@ -62,10 +62,10 @@ C: A0007 UID SEARCH UID 4103:*
 S: * SEARCH 4103
 S: A0007 OK Search completed (0.001 + 0.000 secs).
 C: A0008 UID FETCH 4103 (UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)])
-S: * 3 FETCH (UID 4103 RFC822.SIZE 1904 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {104}
+S: * 3 FETCH (UID 4103 RFC822.SIZE 1904 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {105}
 S: Message-ID: <reply-2@mail.example.com>
 S: From: Jane Doe <jane@example.com>
-S: Subject: Re: Your enquiry
+S: Subject: Re: Your question
 S: 
 S: )
 S: A0008 OK Fetch completed (0.001 + 0.000 secs).

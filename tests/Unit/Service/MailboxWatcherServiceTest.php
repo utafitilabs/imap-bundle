@@ -265,7 +265,7 @@ final class MailboxWatcherServiceTest extends TestCase
 
         $logs = implode("\n", $this->logger->lines()).json_encode(array_map(static fn (array $record): array => array_filter($record['context'], 'is_scalar'), $this->logger->records));
         self::assertNotSame('', $logs);
-        foreach (['s3cret', 'answers%40example.org', 'jane@example.com', 'Your enquiry', 'Body of'] as $secret) {
+        foreach (['s3cret', 'answers%40example.org', 'jane@example.com', 'Your question', 'Body of'] as $secret) {
             self::assertStringNotContainsString($secret, $logs);
         }
     }
@@ -306,6 +306,6 @@ final class MailboxWatcherServiceTest extends TestCase
 
     private function mail(int $number): string
     {
-        return "Message-ID: <m{$number}@example.com>\r\nFrom: Jane Doe <jane@example.com>\r\nTo: answers@example.org\r\nSubject: Re: Your enquiry {$number}\r\n\r\nBody of mail {$number}\r\n";
+        return "Message-ID: <m{$number}@example.com>\r\nFrom: Jane Doe <jane@example.com>\r\nTo: answers@example.org\r\nSubject: Re: Your question {$number}\r\n\r\nBody of mail {$number}\r\n";
     }
 }

@@ -50,44 +50,33 @@ final class UtafitiLabsImapBundle extends AbstractBundle
     {
         /** @var ArrayNodeDefinition $root */
         $root = $definition->rootNode();
+        $mailbox = $root->children()
+            ->arrayNode('mailboxes')
+            ->info('The watched mailboxes by name; run one "imap:watch <name>" process per mailbox.')
+            ->useAttributeAsKey('name')
+            ->arrayPrototype()
+            ->children();
 
-        $root
-            ->children()
-                ->arrayNode('mailboxes')
-                    ->info('The watched mailboxes by name; run one "imap:watch <name>" process per mailbox.')
-                    ->useAttributeAsKey('name')
-                    ->arrayPrototype()
-                        ->children()
-                            ->scalarNode('dsn')
-                                ->info('imaps://user:password@host[:993] or imap://user:password@host[:143] (STARTTLS), credentials URL-encoded; empty turns the mailbox off.')
-                                ->defaultValue('')
-                            ->end()
-                            ->scalarNode('handler')
-                                ->info('The id of the service implementing IncomingMailHandlerInterface.')
-                                ->isRequired()
-                                ->cannotBeEmpty()
-                            ->end()
-                            ->scalarNode('folder')->defaultValue('INBOX')->cannotBeEmpty()->end()
-                            ->integerNode('catch_up_days')
-                                ->info('On every (re)connect, the mail of this many days back is offered to the handler again.')
-                                ->defaultValue(3)->min(0)->max(365)
-                            ->end()
-                            ->integerNode('idle_seconds')
-                                ->info('IDLE is renewed after this many seconds; servers may drop an IDLE after 30 minutes (RFC 2177).')
-                                ->defaultValue(1740)->min(60)->max(1740)
-                            ->end()
-                            ->integerNode('poll_seconds')
-                                ->info('How often a server without IDLE is checked.')
-                                ->defaultValue(300)->min(10)
-                            ->end()
-                            ->integerNode('max_message_bytes')
-                                ->info('Larger messages are skipped without being fetched.')
-                                ->defaultValue(10485760)->min(1024)
-                            ->end()
-                        ->end()
-                    ->end()
-                ->end()
-            ->end();
+        $mailbox->scalarNode('dsn')
+            ->info('imaps://user:password@host[:993] or imap://user:password@host[:143] (STARTTLS), credentials URL-encoded; empty turns the mailbox off.')
+            ->defaultValue('');
+        $mailbox->scalarNode('handler')
+            ->info('The id of the service implementing IncomingMailHandlerInterface.')
+            ->isRequired()
+            ->cannotBeEmpty();
+        $mailbox->scalarNode('folder')->defaultValue('INBOX')->cannotBeEmpty();
+        $mailbox->integerNode('catch_up_days')
+            ->info('On every (re)connect, the mail of this many days back is offered to the handler again.')
+            ->defaultValue(3)->min(0)->max(365);
+        $mailbox->integerNode('idle_seconds')
+            ->info('IDLE is renewed after this many seconds; servers may drop an IDLE after 30 minutes (RFC 2177).')
+            ->defaultValue(1740)->min(60)->max(1740);
+        $mailbox->integerNode('poll_seconds')
+            ->info('How often a server without IDLE is checked.')
+            ->defaultValue(300)->min(10);
+        $mailbox->integerNode('max_message_bytes')
+            ->info('Larger messages are skipped without being fetched.')
+            ->defaultValue(10485760)->min(1024);
     }
 
     /**

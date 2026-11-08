@@ -25,9 +25,9 @@ final class QuotedReplyStripperServiceTest extends TestCase
      */
     public static function replies(): iterable
     {
-        yield 'Gmail' => ['gmail-reply', "Yes, the 14th works for us — two adults.\n\nThanks,\nJane"];
+        yield 'Gmail' => ['gmail-reply', "Yes, the 14th works for us — two people.\n\nThanks,\nJane"];
         yield 'Outlook' => ['outlook-reply', "Hello,\n\nThe price of €450 per person is fine. We’ll pay the deposit on Monday.\n\nKind regards\nJohn"];
-        yield 'Apple Mail' => ['apple-mail-reply', "Sounds wonderful, we’ll take the lodge.\n\nKim"];
+        yield 'Apple Mail' => ['apple-mail-reply', "Sounds wonderful, we’ll take the larger room.\n\nKim"];
         yield 'Yahoo' => ['yahoo-reply', " Please book the March dates.\nSam"];
     }
 

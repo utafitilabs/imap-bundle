@@ -1,12 +1,12 @@
 MIME-Version: 1.0
-References: <enquiry-12@example.org>
- <enquiry-12-ack@example.org>
-In-Reply-To: <enquiry-12@example.org>
+References: <question-12@example.org>
+ <question-12-ack@example.org>
+In-Reply-To: <question-12@example.org>
 From: Jane Doe <jane@example.com>
 Date: Sun, 8 Nov 2026 12:58:00 +0300
 Message-ID: <CAF3x9q=reply1@mail.example.com>
-Subject: Re: Your enquiry about
- the northern circuit
+Subject: Re: Your question about
+ the March workshop
 To: Answers <answers@example.org>
 Content-Type: multipart/alternative; boundary="000000000000a1b2c3d4e5f6"
 
@@ -14,7 +14,7 @@ Content-Type: multipart/alternative; boundary="000000000000a1b2c3d4e5f6"
 Content-Type: text/plain; charset="UTF-8"
 Content-Transfer-Encoding: quoted-printable
 
-Yes, the 14th works for us =E2=80=94 two adults.
+Yes, the 14th works for us =E2=80=94 two people.
 
 Thanks,
 Jane
@@ -29,7 +29,7 @@ On Fri, Nov 7, 2026 at 4:12=E2=80=AFPM Answers <answers@example.org> wrote:
 Content-Type: text/html; charset="UTF-8"
 Content-Transfer-Encoding: quoted-printable
 
-<div dir=3D"ltr">Yes, the 14th works for us =E2=80=94 two adults.<div><br></=
+<div dir=3D"ltr">Yes, the 14th works for us =E2=80=94 two people.<div><br></=
 div><div>Thanks,</div><div>Jane</div></div><br><div class=3D"gmail_quote"><=
 div dir=3D"ltr" class=3D"gmail_attr">On Fri, Nov 7, 2026 at 4:12=E2=80=AFPM=
  Answers &lt;<a href=3D"mailto:answers@example.org">answers@example.org</a>=
