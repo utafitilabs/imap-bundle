@@ -1,0 +1,16 @@
+# Internal authoring aids — never publish.
+/.claude/
+/CLAUDE.md
+
+# Dependencies & build
+/vendor/
+/composer.lock
+
+# Tooling caches
+.phpunit.result.cache
+.php-cs-fixer.cache
+/.phpunit.cache/
+
+# IDE
+/.idea/
+/.vscode/

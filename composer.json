@@ -1,0 +1,65 @@
+{
+    "name": "utafitilabs/imap-bundle",
+    "description": "Read-only IMAP mailbox watching for Symfony: an IMAP IDLE client, an RFC 822/MIME reader and a long-running watcher, written on PHP built-ins only.",
+    "type": "symfony-bundle",
+    "keywords": ["imap", "idle", "mail", "mime", "rfc822", "inbox", "watcher", "symfony"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ezekiel Mjema",
+            "homepage": "https://github.com/eemjema"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "ext-iconv": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "psr/log": "^3.0",
+        "symfony/clock": "^7.3 || ^8.0",
+        "symfony/config": "^7.3 || ^8.0",
+        "symfony/console": "^7.3 || ^8.0",
+        "symfony/dependency-injection": "^7.3 || ^8.0",
+        "symfony/framework-bundle": "^7.3 || ^8.0",
+        "symfony/http-kernel": "^7.3 || ^8.0"
+    },
+    "suggest": {
+        "ext-pcntl": "Lets imap:watch stop cleanly on SIGTERM and SIGINT."
+    },
+    "autoload": {
+        "psr-4": {
+            "UtafitiLabs\\ImapBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "UtafitiLabs\\ImapBundle\\Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.2",
+        "phpunit/phpunit": "^13.2"
+    },
+    "scripts": {
+        "cs:fix": "php-cs-fixer fix",
+        "cs:check": "php-cs-fixer fix --dry-run --diff",
+        "phpstan": "phpstan analyse --no-progress --memory-limit=1G",
+        "test": "phpunit",
+        "check": [
+            "@cs:check",
+            "@phpstan",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1-dev"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
