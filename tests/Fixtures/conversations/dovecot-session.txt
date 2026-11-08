@@ -1,0 +1,74 @@
+# A Dovecot 2.3 session, recorded and anonymised: greeting, SASL-IR login, EXAMINE,
+# catch-up search, header fetch, one body fetch, IDLE until new mail, logout.
+S: * OK [CAPABILITY IMAP4rev1 LOGIN-REFERRALS ID ENABLE IDLE SASL-IR LITERAL+ AUTH=PLAIN] IMAP server ready.
+C: A0001 AUTHENTICATE PLAIN AGFuc3dlcnNAZXhhbXBsZS5vcmcAczNjcmV0IHBhc3M=
+S: A0001 OK [CAPABILITY IMAP4rev1 LOGIN-REFERRALS ID ENABLE IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY PREVIEW=FUZZY PREVIEW STATUS=SIZE SAVEDATE LITERAL+ NOTIFY SPECIAL-USE] Logged in
+C: A0002 EXAMINE "INBOX"
+S: * FLAGS (\Answered \Flagged \Deleted \Seen \Draft)
+S: * OK [PERMANENTFLAGS ()] Read-only mailbox.
+S: * 2 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1730000000] UIDs valid
+S: * OK [UIDNEXT 4103] Predicted next UID
+S: * OK [HIGHESTMODSEQ 9001] Highest
+S: A0002 OK [READ-ONLY] Examine completed (0.001 + 0.000 secs).
+C: A0003 UID SEARCH SINCE 5-Nov-2026
+S: * SEARCH 4101 4102
+S: A0003 OK Search completed (0.001 + 0.000 secs).
+C: A0004 UID FETCH 4101,4102 (UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)])
+S: * 1 FETCH (UID 4101 RFC822.SIZE 2876 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {357}
+S: Message-ID: <reply-1@mail.example.com>
+S: From: Jane Doe <jane@example.com>
+S: To: answers@example.org
+S: Subject: Re: Your enquiry
+S: Date: Sat, 08 Nov 2026 09:58:00 +0000
+S: In-Reply-To: <enquiry-12@example.org>
+S: Authentication-Results: mx.example.org;
+S:  dkim=pass header.d=example.com;
+S:  spf=pass smtp.mailfrom=example.com;
+S:  dmarc=pass header.from=example.com
+S: 
+S: )
+S: * 2 FETCH (UID 4102 RFC822.SIZE 48213 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {174}
+S: Message-ID: <newsletter-77@lists.example.net>
+S: From: News <news@lists.example.net>
+S: To: answers@example.org
+S: Subject: Weekly digest
+S: Date: Sat, 08 Nov 2026 09:59:00 +0000
+S: 
+S: )
+S: A0004 OK Fetch completed (0.001 + 0.000 secs).
+C: A0005 UID FETCH 4101 (UID RFC822.SIZE INTERNALDATE BODY.PEEK[])
+S: * 1 FETCH (UID 4101 RFC822.SIZE 277 INTERNALDATE "08-Nov-2026 09:58:03 +0000" BODY[] {277}
+S: Message-ID: <reply-1@mail.example.com>
+S: From: Jane Doe <jane@example.com>
+S: To: answers@example.org
+S: Subject: Re: Your enquiry
+S: Date: Sat, 08 Nov 2026 09:58:00 +0000
+S: In-Reply-To: <enquiry-12@example.org>
+S: Content-Type: text/plain; charset=utf-8
+S: 
+S: Yes, the 14th works for us.
+S: )
+S: A0005 OK Fetch completed (0.001 + 0.000 secs).
+C: A0006 IDLE
+S: + idling
+S: * OK Still here
+S: * 3 EXISTS
+C: DONE
+S: * 1 RECENT
+S: A0006 OK Idle completed (0.001 + 63.215 secs).
+C: A0007 UID SEARCH UID 4103:*
+S: * SEARCH 4103
+S: A0007 OK Search completed (0.001 + 0.000 secs).
+C: A0008 UID FETCH 4103 (UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)])
+S: * 3 FETCH (UID 4103 RFC822.SIZE 1904 BODY[HEADER.FIELDS (MESSAGE-ID FROM TO CC SUBJECT DATE IN-REPLY-TO REFERENCES AUTHENTICATION-RESULTS)] {104}
+S: Message-ID: <reply-2@mail.example.com>
+S: From: Jane Doe <jane@example.com>
+S: Subject: Re: Your enquiry
+S: 
+S: )
+S: A0008 OK Fetch completed (0.001 + 0.000 secs).
+C: A0009 LOGOUT
+S: * BYE Logging out
+S: A0009 OK Logout completed (0.001 + 0.000 secs).
