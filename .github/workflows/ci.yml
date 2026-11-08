@@ -1,0 +1,104 @@
+name: CI
+
+# Gatekeeper: every push and pull request must pass the full standard
+# (code style -> static analysis -> tests) before a PR is valid for maintainer review.
+#
+# Matrix per the Symfony bundle best practices: lowest supported dependencies,
+# every supported PHP version, every supported major Symfony version.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }}${{ matrix.dependencies == 'lowest' && ' (lowest)' || '' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Lower bound of everything we claim to support.
+          - php: '8.4'
+            symfony: '7.3.*'
+            dependencies: lowest
+            deprecations: 'disabled=1'
+          - php: '8.4'
+            symfony: '7.*'
+            dependencies: highest
+            deprecations: 'max[direct]=0'
+          # Newest PHP + newest Symfony, with the coverage gate (>= 95%).
+          - php: '8.5'
+            symfony: '8.*'
+            dependencies: highest
+            deprecations: 'max[direct]=0'
+            coverage: true
+
+    env:
+      SYMFONY_DEPRECATIONS_HELPER: ${{ matrix.deprecations }}
+      SYMFONY_REQUIRE: ${{ matrix.symfony }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          # openssl, mbstring and iconv are what the bundle needs; pcntl and posix let
+          # the functional suite stop imap:watch with a real SIGTERM.
+          extensions: iconv, mbstring, openssl, pcntl, posix
+          coverage: ${{ matrix.coverage && 'pcov' || 'none' }}
+          tools: composer:v2, flex
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      # Best practice: cache Composer's package cache, never vendor/.
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ matrix.php }}-${{ matrix.symfony }}-${{ matrix.dependencies }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-${{ matrix.symfony }}-
+
+      - name: Install dependencies (highest)
+        if: matrix.dependencies == 'highest'
+        run: composer update --no-interaction --no-progress --prefer-dist
+
+      - name: Install dependencies (lowest)
+        if: matrix.dependencies == 'lowest'
+        # This cell exists to install the oldest allowed versions, so Composer's
+        # security-advisory blocking must be off here; the highest cells keep it on.
+        run: |
+          composer config policy.advisories.block false
+          composer update --no-interaction --no-progress --prefer-dist --prefer-lowest
+
+      - name: Code style (php-cs-fixer)
+        run: composer cs:check
+
+      - name: Static analysis (PHPStan max)
+        run: composer phpstan
+
+      - name: Tests (PHPUnit)
+        if: ${{ !matrix.coverage }}
+        run: composer test
+
+      - name: Tests (PHPUnit, with coverage)
+        if: ${{ matrix.coverage }}
+        run: vendor/bin/phpunit --coverage-clover coverage.xml --coverage-text
+
+      - name: Enforce coverage >= 95%
+        if: ${{ matrix.coverage }}
+        run: |
+          php -r '
+            $xml = new SimpleXMLElement(file_get_contents("coverage.xml"));
+            $m = $xml->xpath("//project/metrics")[0];
+            $pct = 100.0 * (int) $m["coveredstatements"] / max(1, (int) $m["statements"]);
+            printf("Statement coverage: %.2f%%\n", $pct);
+            exit($pct >= 95.0 ? 0 : 1);
+          '

@@ -1,0 +1,280 @@
+# UtafitiLabsImapBundle
+
+Read-only IMAP mailbox watching for **Symfony**: an IMAP client with IDLE, an RFC 822 /
+MIME reader, and a long-running watcher that hands each new message to your handler.
+Written on PHP built-ins and Symfony components only.
+
+## Contents
+
+- [Installation](#installation)
+- [Requirements](#requirements)
+- [Configuration](#configuration)
+  - [The DSN](#the-dsn)
+  - [A mailbox that is off](#a-mailbox-that-is-off)
+- [The handler](#the-handler)
+- [Running the watcher](#running-the-watcher)
+  - [What the watcher does](#what-the-watcher-does)
+  - [Process supervisors and containers](#process-supervisors-and-containers)
+  - [Logs](#logs)
+- [Reading messages](#reading-messages)
+  - [The models](#the-models)
+  - [Stripping quoted mail](#stripping-quoted-mail)
+- [Security](#security)
+- [Providers](#providers)
+- [Using the client on its own](#using-the-client-on-its-own)
+- [Limitations](#limitations)
+
+## Installation
+
+```console
+composer require utafitilabs/imap-bundle
+```
+
+Without Symfony Flex, enable the bundle:
+
+```php
+// config/bundles.php
+return [
+    // ...
+    UtafitiLabs\ImapBundle\UtafitiLabsImapBundle::class => ['all' => true],
+];
+```
+
+## Requirements
+
+- PHP **8.4+** with the `openssl`, `mbstring` and `iconv` extensions; `pcntl` lets
+  `imap:watch` stop cleanly on SIGTERM and SIGINT.
+- Symfony **7.3+ / 8**.
+- An IMAP server reachable over TLS.
+
+## Configuration
+
+```yaml
+# config/packages/utafitilabs_imap.yaml
+utafitilabs_imap:
+    mailboxes:
+        replies:                                # the name you pass to imap:watch
+            dsn: '%env(IMAP_REPLIES_DSN)%'      # required to be set, may be empty (off)
+            handler: App\Mail\ReplyHandler      # service id of your handler
+            folder: INBOX                       # default INBOX
+            catch_up_days: 3                    # default 3, 0–365
+            idle_seconds: 1740                  # default 1740 (29 min), 60–1740
+            poll_seconds: 300                   # default 300, servers without IDLE
+            max_message_bytes: 10485760         # default 10 MB
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `dsn` | `''` | Where and as whom to log in; empty turns the mailbox off |
+| `handler` | — | The id of the service implementing `IncomingMailHandlerInterface` |
+| `folder` | `INBOX` | The folder watched; non-ASCII names are sent in modified UTF-7 |
+| `catch_up_days` | `3` | On every connect, mail received this many days back is offered again |
+| `idle_seconds` | `1740` | IDLE is ended and issued again after this long; RFC 2177 lets servers drop an IDLE after 30 minutes |
+| `poll_seconds` | `300` | How often a server without IDLE is checked with NOOP and UID SEARCH |
+| `max_message_bytes` | `10485760` | Messages larger than this (by RFC822.SIZE) are skipped without being fetched |
+
+### The DSN
+
+```text
+imaps://USER:PASSWORD@HOST[:993]     TLS from the first byte (recommended)
+imap://USER:PASSWORD@HOST[:143]      STARTTLS, required before any credential is sent
+```
+
+User and password are URL-encoded: `replies@example.com` with password `p@ss:word` is
+`imaps://replies%40example.com:p%40ss%3Aword@imap.example.com`. A connection is never made
+in clear text; a server on `imap://` that does not offer STARTTLS is refused.
+
+### A mailbox that is off
+
+An empty DSN turns a mailbox off. `imap:watch` then prints
+`Mailbox "replies" is off: its DSN is empty. Waiting until stopped.` and waits for SIGTERM
+or SIGINT instead of exiting, so a process supervisor or a container orchestrator that
+restarts exited processes does not restart it in a loop. Define the environment variable
+empty in `.env` and set it where the mailbox should be watched.
+
+## The handler
+
+```php
+namespace UtafitiLabs\ImapBundle\Service;
+
+interface IncomingMailHandlerInterface
+{
+    public function wants(MessageHeaders $headers): bool;
+
+    public function handle(Message $message): void;
+}
+```
+
+For each message the watcher first fetches only its identifying header fields
+(Message-ID, From, To, Cc, Subject, Date, In-Reply-To, References,
+Authentication-Results) and its size, and asks `wants()`. Only when the handler says yes is
+the whole message fetched, read and passed to `handle()`. An application that takes every
+message returns `true`.
+
+`wants()` is also where the handler declines what it has already handled: the watcher
+offers the last `catch_up_days` of mail again on every connect, so the handler keeps its
+own record of Message-IDs it has seen. A message without a Message-ID gets a stable one
+made from its UIDVALIDITY and UID (`<1730000000.4101@replies.imap.invalid>`).
+
+An exception thrown by `wants()` or `handle()` is logged with the message's UID and
+Message-ID, and the watcher goes on with the next message; the failed message is offered
+again when the watcher restarts.
+
+## Running the watcher
+
+```console
+php bin/console imap:watch replies
+```
+
+Run one process per mailbox.
+
+### What the watcher does
+
+1. Connects, verifies the server's certificate, logs in and opens the folder with EXAMINE
+   (read-only).
+2. Catches up: searches the mail received since `catch_up_days` ago and offers it to the
+   handler (headers first, as above).
+3. Waits with IDLE. When the server announces new mail it ends IDLE, searches by UID for
+   everything above the highest UID it has seen, and offers that. IDLE is renewed every
+   `idle_seconds`. A server without IDLE is checked every `poll_seconds` instead; this is
+   logged once.
+4. On any network or protocol error it closes the connection and reconnects after 1 s,
+   2 s, 4 s … up to 5 minutes; a successful connection resets the delay. If the folder's
+   UIDVALIDITY changed, the catch-up starts afresh.
+5. On SIGTERM or SIGINT it ends IDLE, logs out and exits with 0, usually within a second.
+
+### Process supervisors and containers
+
+```ini
+; /etc/supervisor/conf.d/imap-replies.conf
+[program:imap-replies]
+command=php /srv/app/bin/console imap:watch replies --no-interaction
+autorestart=true
+stopsignal=TERM
+stopwaitsecs=10
+```
+
+In a container, run the command as the process of its own role or service; the stop
+signal the runtime sends ends it cleanly.
+
+### Logs
+
+The watcher logs on the `imap` channel (Monolog) or the application's `logger`. A record
+carries the mailbox name, UIDs, Message-IDs and what was decided — handled, declined,
+skipped as too large, failed, reconnecting — and never a DSN, a password, an address, a
+subject or a body.
+
+## Reading messages
+
+`MessageReaderService` is a service of its own and works on any raw message, for example
+an uploaded `.eml` file:
+
+```php
+$message = $reader->read(file_get_contents('reply.eml'));
+$headers = $reader->readHeaders($headerBytes);   // a header block alone
+```
+
+It unfolds headers, decodes RFC 2047 encoded words (joining adjacent words before
+converting, so a character split across words survives) and RFC 2231 parameters, walks
+nested multiparts by boundary, decodes base64 and quoted-printable, converts every charset
+to UTF-8 (ISO-8859-1 as Windows-1252, an unknown charset by best effort), joins
+`format=flowed` text, and never throws on content.
+
+### The models
+
+| Model | Properties |
+|---|---|
+| `Message` | `headers`, `textBody` (the text/plain part, or the HTML part reduced to text), `htmlBody` (`?string`), `attachments` (`list<Attachment>`) |
+| `MessageHeaders` | `messageId`, `from` (`?Address`), `to`, `cc` (`list<Address>`), `subject`, `date` (`?DateTimeImmutable`), `inReplyTo`, `references`, `authenticationResults` (`list<string>`) |
+| `Address` | `email`, `name` (`?string`) |
+| `Attachment` | `filename` (`?string`), `contentType`, `size` (decoded bytes) |
+
+All are read-only. An attachment's content is never decoded into memory; its size is
+counted from the encoded part.
+
+### Stripping quoted mail
+
+```php
+$newText = $stripper->strip($message->textBody);
+```
+
+`QuotedReplyStripperService` cuts at an attribution line (`On … wrote:` in the Gmail,
+Apple Mail, Yahoo and Thunderbird forms, also in German, French, Spanish and Dutch, wrapped
+over up to three lines), at Outlook's `-----Original Message-----` or its
+`From: … Sent: …` block, and at the signature delimiter `-- `. Lines quoted with `>` are
+dropped wherever they are, so answers written between quotes stay; a trailing
+`Sent from my …` line goes too.
+
+## Security
+
+- **TLS always, verified.** The certificate chain and the host name are verified, with SNI,
+  on TLS 1.2 or 1.3; there is no option to turn verification off. `imap://` requires
+  STARTTLS and refuses a server that sends data before the handshake.
+- **Read-only by construction.** The client has no method that stores flags, copies,
+  moves, expunges, appends or deletes; folders are opened with EXAMINE and messages fetched
+  with `BODY.PEEK`, so not even the `\Seen` flag changes. The test suite checks every
+  command sent in its recorded conversations.
+- **Data minimisation.** Only headers are fetched until the handler wants a message;
+  declined mail's bodies never leave the server.
+- **Bounded memory.** Messages over `max_message_bytes` are skipped unfetched; the response
+  parser refuses a literal over that size plus 64 KB and a line over 1 MB.
+- **No secrets in logs or errors.** Errors name the command verb, never its arguments, so
+  a LOGIN line never reaches an exception; the DSN and password are hidden from dumps.
+- **Spoofed senders.** `MessageHeaders::$authenticationResults` holds the SPF, DKIM and
+  DMARC verdicts receiving servers added
+  ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)). Trust only the header your own
+  provider's server added — usually the first one, naming its host — since a sender can
+  write any header of its own:
+
+  ```php
+  public function wants(MessageHeaders $headers): bool
+  {
+      $verdict = $headers->authenticationResults[0] ?? '';
+
+      return str_starts_with($verdict, 'mx.example.com;') && str_contains($verdict, 'dmarc=pass');
+  }
+  ```
+
+## Providers
+
+Any IMAP4rev1 ([RFC 3501](https://www.rfc-editor.org/rfc/rfc3501)) or IMAP4rev2
+([RFC 9051](https://www.rfc-editor.org/rfc/rfc9051)) server works. The client logs in with
+AUTHENTICATE PLAIN when the server offers it and LOGIN otherwise.
+
+- **Self-hosted (Dovecot, Cyrus, …) and most hosting providers**: `imaps://` on port 993
+  with the mailbox's password.
+- **Gmail / Google Workspace**: turn on 2-Step Verification and create an
+  [app password](https://support.google.com/accounts/answer/185833); use it as the
+  password. Google may disable app passwords for Workspace accounts by policy.
+- **Microsoft 365 / Outlook.com**: basic authentication is disabled; they need OAuth 2.0
+  (XOAUTH2), which this bundle **does not support yet**. Logins are made by
+  `AuthenticatorInterface` implementations tried in order, so XOAUTH2 is one more class.
+
+## Using the client on its own
+
+```php
+use Symfony\Component\Clock\NativeClock;
+use UtafitiLabs\ImapBundle\Factory\ImapClientFactory;
+
+$client = (new ImapClientFactory(new NativeClock()))->create('imaps://u:p@imap.example.com', 10485760);
+$client->open();
+$status = $client->examine('INBOX');
+foreach ($client->fetchHeaders($client->searchSince(new \DateTimeImmutable('-1 day'))) as $headers) {
+    // $headers->uid, $headers->size, $headers->bytes
+}
+$client->logout();
+```
+
+`ImapClientInterface` offers `open`, `supportsIdle`, `examine`, `searchSince`,
+`searchUidsFrom`, `fetchHeaders`, `fetch`, `idle`, `noop`, `logout` and `close`, and nothing
+that writes. A server certificate signed by a private CA is trusted by passing its CA file
+as the factory's second argument; verification itself stays on.
+
+## Limitations
+
+- No XOAUTH2 yet (see [Providers](#providers)).
+- One folder per mailbox entry; watch another folder with another entry.
+- Attachments are described, not delivered; fetch the raw message with the client when the
+  content is needed.
+- The reader's text is UTF-8 with `\n` line endings; a message's first text/plain part is
+  its text.
