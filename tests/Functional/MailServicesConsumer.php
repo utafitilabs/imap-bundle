@@ -16,6 +16,7 @@ namespace UtafitiLabs\ImapBundle\Tests\Functional;
 use UtafitiLabs\ImapBundle\Service\MailboxWatcherService;
 use UtafitiLabs\ImapBundle\Service\MessageReaderService;
 use UtafitiLabs\ImapBundle\Service\QuotedReplyStripperService;
+use UtafitiLabs\ImapBundle\Store\MailboxStateStoreInterface;
 
 /**
  * An application service that autowires the bundle's public services by class.
@@ -26,6 +27,7 @@ final readonly class MailServicesConsumer
         public MessageReaderService $reader,
         public QuotedReplyStripperService $stripper,
         public MailboxWatcherService $watcher,
+        public MailboxStateStoreInterface $states,
     ) {
     }
 }

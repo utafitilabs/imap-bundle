@@ -39,6 +39,15 @@ final class FakeImapClient implements ImapClientInterface
 
     public bool $closed = false;
 
+    /** @var list<int>|null what SEARCH SINCE finds; null finds every message */
+    public ?array $sinceUids = null;
+
+    /** Answers a UID range n:* as servers do: with the highest message even when its UID is below n. */
+    public bool $openRangeIncludesHighest = false;
+
+    /** @var array<int, \Throwable> thrown when the whole message of that UID is fetched */
+    public array $fetchFailures = [];
+
     /**
      * @param array<int, string> $messages raw messages by UID
      */
@@ -70,14 +79,18 @@ final class FakeImapClient implements ImapClientInterface
     {
         $this->calls[] = 'searchSince '.$since->format('Y-m-d');
 
-        return $this->uids(0);
+        return $this->sinceUids ?? $this->uids(0);
     }
 
     public function searchUidsFrom(int $uid): array
     {
         $this->calls[] = 'searchUidsFrom '.$uid;
+        $uids = $this->uids($uid);
+        if ($this->openRangeIncludesHighest && [] === $uids && [] !== $this->messages) {
+            $uids = [max(array_keys($this->messages))];
+        }
 
-        return $this->uids($uid);
+        return $uids;
     }
 
     public function fetchHeaders(array $uids): array
@@ -98,6 +111,9 @@ final class FakeImapClient implements ImapClientInterface
     public function fetch(int $uid): ?RawMessage
     {
         $this->calls[] = 'fetch '.$uid;
+        if (isset($this->fetchFailures[$uid])) {
+            throw $this->fetchFailures[$uid];
+        }
 
         return isset($this->messages[$uid]) ? new RawMessage($uid, \strlen($this->messages[$uid]), null, $this->messages[$uid]) : null;
     }

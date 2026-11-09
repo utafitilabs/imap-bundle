@@ -29,6 +29,9 @@ final class RecordingHandler implements IncomingMailHandlerInterface
     /** @var list<string> */
     public array $offered = [];
 
+    /** Runs after each message handled. */
+    public ?\Closure $onHandle = null;
+
     /**
      * @param list<string> $declined
      * @param list<string> $failing
@@ -57,5 +60,8 @@ final class RecordingHandler implements IncomingMailHandlerInterface
             throw new \RuntimeException('handle failed');
         }
         $this->handled[] = $message->headers->messageId;
+        if (null !== $this->onHandle) {
+            ($this->onHandle)();
+        }
     }
 }

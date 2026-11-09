@@ -27,6 +27,7 @@ final class TestKernel extends Kernel
     use MicroKernelTrait;
 
     public const string INVALID_ENVIRONMENT = 'invalid';
+    public const string STATE_POOL_ENVIRONMENT = 'state_pool';
 
     public function registerBundles(): iterable
     {
@@ -74,6 +75,10 @@ final class TestKernel extends Kernel
                 ],
             ],
         ]);
+        if (self::STATE_POOL_ENVIRONMENT === $this->environment) {
+            $container->extension('framework', ['cache' => ['pools' => ['app.imap_state' => ['adapter' => 'cache.adapter.array']]]]);
+            $container->extension('utafitilabs_imap', ['state_pool' => 'app.imap_state']);
+        }
         if (self::INVALID_ENVIRONMENT === $this->environment) {
             $container->extension('utafitilabs_imap', ['mailboxes' => ['answers' => ['idle_seconds' => 3600]]]);
         }

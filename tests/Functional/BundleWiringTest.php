@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace UtafitiLabs\ImapBundle\Tests\Functional;
 
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
@@ -21,6 +22,9 @@ use Symfony\Component\Console\Command\LazyCommand;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 use UtafitiLabs\ImapBundle\Command\WatchMailboxCommand;
+use UtafitiLabs\ImapBundle\Model\Mailbox;
+use UtafitiLabs\ImapBundle\Model\MailboxState;
+use UtafitiLabs\ImapBundle\Store\CacheMailboxStateStore;
 
 /**
  * Boots a kernel with FrameworkBundle and the bundle, configured with two
@@ -35,6 +39,9 @@ final class BundleWiringTest extends KernelTestCase
 
     protected function tearDown(): void
     {
+        if (self::$booted) {
+            $this->pool('cache.app')->clear();
+        }
         parent::tearDown();
         restore_exception_handler();
     }
@@ -75,12 +82,49 @@ final class BundleWiringTest extends KernelTestCase
         self::assertInstanceOf(MailServicesConsumer::class, self::getContainer()->get('app.mail_services_consumer'));
     }
 
+    public function testTheStateOfEachMailboxIsKeptInCacheAppByDefault(): void
+    {
+        self::bootKernel(['debug' => false]);
+        $mailbox = new Mailbox('answers', 'imaps://u:p@imap.example.com', 'Replies');
+
+        $this->consumer()->states->save($mailbox, new MailboxState(100, 11));
+
+        self::assertEquals(new MailboxState(100, 11), (new CacheMailboxStateStore($this->pool('cache.app')))->get($mailbox));
+    }
+
+    public function testStatePoolNamesThePoolTheStateIsKeptIn(): void
+    {
+        self::bootKernel(['debug' => false, 'environment' => TestKernel::STATE_POOL_ENVIRONMENT]);
+        $mailbox = new Mailbox('answers', 'imaps://u:p@imap.example.com', 'Replies');
+
+        $this->consumer()->states->save($mailbox, new MailboxState(100, 11));
+
+        self::assertEquals(new MailboxState(100, 11), (new CacheMailboxStateStore($this->pool('app.imap_state')))->get($mailbox));
+        self::assertNull((new CacheMailboxStateStore($this->pool('cache.app')))->get($mailbox));
+    }
+
     public function testTheConfigurationRefusesAnIdleOverTwentyNineMinutes(): void
     {
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage('idle_seconds');
 
         self::bootKernel(['debug' => false, 'environment' => TestKernel::INVALID_ENVIRONMENT]);
+    }
+
+    private function consumer(): MailServicesConsumer
+    {
+        $consumer = self::getContainer()->get('app.mail_services_consumer');
+        self::assertInstanceOf(MailServicesConsumer::class, $consumer);
+
+        return $consumer;
+    }
+
+    private function pool(string $id): CacheItemPoolInterface
+    {
+        $pool = self::getContainer()->get($id);
+        self::assertInstanceOf(CacheItemPoolInterface::class, $pool);
+
+        return $pool;
     }
 
     private function application(): Application

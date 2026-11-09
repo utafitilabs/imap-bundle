@@ -14,19 +14,24 @@ declare(strict_types=1);
 namespace UtafitiLabs\ImapBundle\Tests\Unit\Service;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Clock\MockClock;
 use UtafitiLabs\ImapBundle\Exception\ImapCommandFailedException;
 use UtafitiLabs\ImapBundle\Exception\ImapConnectionException;
 use UtafitiLabs\ImapBundle\Model\Mailbox;
+use UtafitiLabs\ImapBundle\Model\MailboxState;
 use UtafitiLabs\ImapBundle\Model\Message;
 use UtafitiLabs\ImapBundle\Model\MessageHeaders;
 use UtafitiLabs\ImapBundle\Service\IncomingMailHandlerInterface;
 use UtafitiLabs\ImapBundle\Service\MailboxWatcherService;
 use UtafitiLabs\ImapBundle\Service\MessageReaderService;
+use UtafitiLabs\ImapBundle\Store\CacheMailboxStateStore;
+use UtafitiLabs\ImapBundle\Store\MailboxStateStoreInterface;
 use UtafitiLabs\ImapBundle\Tests\Double\FakeImapClient;
 use UtafitiLabs\ImapBundle\Tests\Double\FakeImapClientFactory;
 use UtafitiLabs\ImapBundle\Tests\Double\RecordingHandler;
 use UtafitiLabs\ImapBundle\Tests\Double\RecordingLogger;
+use UtafitiLabs\ImapBundle\Tests\Double\RecordingStateStore;
 
 final class MailboxWatcherServiceTest extends TestCase
 {
@@ -35,11 +40,13 @@ final class MailboxWatcherServiceTest extends TestCase
     private MockClock $clock;
     private RecordingLogger $logger;
     private bool $stop = false;
+    private CacheMailboxStateStore $states;
 
     protected function setUp(): void
     {
         $this->clock = new MockClock('2026-11-08 13:00:00 UTC');
         $this->logger = new RecordingLogger();
+        $this->states = new CacheMailboxStateStore(new ArrayAdapter());
     }
 
     public function testItCatchesUpOnTheLastDaysThenIdles(): void
@@ -270,6 +277,210 @@ final class MailboxWatcherServiceTest extends TestCase
         }
     }
 
+    public function testAfterARestartItResumesAfterTheLastUidItRead(): void
+    {
+        $this->states->save($this->mailbox(), new MailboxState(100, 12));
+        $client = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2), 13 => $this->mail(3)]);
+        $client->idleSteps = [$this->stopStep()];
+        $handler = new RecordingHandler();
+
+        $this->watch([$client], $handler);
+
+        self::assertSame(['<m3@example.com>'], $handler->offered);
+        self::assertSame(['open', 'examine INBOX', 'searchUidsFrom 13', 'fetchHeaders 13', 'fetch 13', 'idle 1740', 'logout'], $client->calls);
+        self::assertContains('info: Resuming mailbox answers after UID 12.', $this->logger->lines());
+        self::assertEquals(new MailboxState(100, 13), $this->states->get($this->mailbox()));
+    }
+
+    public function testARestartNeverOffersAgainWhatAnEarlierRunRead(): void
+    {
+        $first = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $first->idleSteps = [$this->stopStep()];
+        $this->watch([$first], new RecordingHandler());
+
+        $this->stop = false;
+        $second = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2), 13 => $this->mail(3)]);
+        $second->idleSteps = [$this->stopStep()];
+        $forgetful = new RecordingHandler();
+        $this->watch([$second], $forgetful);
+
+        self::assertSame(['<m3@example.com>'], $forgetful->offered);
+        self::assertNotContains('searchSince 2026-11-05', $second->calls);
+    }
+
+    public function testTheHighestMessageAnOpenUidRangeAlwaysReturnsIsNotOfferedAgain(): void
+    {
+        $this->states->save($this->mailbox(), new MailboxState(100, 12));
+        $client = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $client->openRangeIncludesHighest = true;
+        $client->idleSteps = [$this->stopStep()];
+        $handler = new RecordingHandler();
+
+        $this->watch([$client], $handler);
+
+        self::assertSame([], $handler->offered);
+        self::assertSame(['open', 'examine INBOX', 'searchUidsFrom 13', 'idle 1740', 'logout'], $client->calls);
+        self::assertEquals(new MailboxState(100, 12), $this->states->get($this->mailbox()));
+    }
+
+    public function testAChangedUidValidityFallsBackToTheCatchUpWindow(): void
+    {
+        $this->states->save($this->mailbox(), new MailboxState(99, 500));
+        $client = new FakeImapClient([3 => $this->mail(3)], uidValidity: 100);
+        $client->idleSteps = [$this->stopStep()];
+        $handler = new RecordingHandler();
+
+        $this->watch([$client], $handler);
+
+        self::assertSame(['<m3@example.com>'], $handler->handled);
+        self::assertContains('searchSince 2026-11-05', $client->calls);
+        self::assertContains('info: The UIDVALIDITY of mailbox answers changed; catching up on the last 3 days.', $this->logger->lines());
+        self::assertEquals(new MailboxState(100, 3), $this->states->get($this->mailbox()));
+    }
+
+    public function testTheFirstRunCatchesUpOnTheWindowAndMailOlderThanItIsNeverOffered(): void
+    {
+        $client = new FakeImapClient([10 => $this->mail(1), 11 => $this->mail(2)]);
+        $client->sinceUids = [11];
+        $client->idleSteps = [
+            function (FakeImapClient $client): bool {
+                $client->messages[12] = $this->mail(3);
+
+                return true;
+            },
+            $this->stopStep(),
+        ];
+        $handler = new RecordingHandler();
+
+        $this->watch([$client], $handler);
+
+        self::assertSame(['<m2@example.com>', '<m3@example.com>'], $handler->offered);
+        self::assertContains('searchUidsFrom 12', $client->calls);
+        self::assertEquals(new MailboxState(100, 12), $this->states->get($this->mailbox()));
+    }
+
+    public function testAnEmptyFirstCatchUpStillStartsFromTheNewestMessage(): void
+    {
+        $client = new FakeImapClient([10 => $this->mail(1), 11 => $this->mail(2)]);
+        $client->sinceUids = [];
+        $client->idleSteps = [$this->stopStep()];
+
+        $this->watch([$client], new RecordingHandler());
+
+        self::assertEquals(new MailboxState(100, 11), $this->states->get($this->mailbox()));
+    }
+
+    public function testTheStateMovesPastEveryMessageWhateverBecameOfIt(): void
+    {
+        $client = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2), 13 => $this->mail(3), 14 => $this->mail(4), 15 => $this->mail(5)]);
+        $client->sizes[12] = 20000000;
+        $client->idleSteps = [$this->stopStep()];
+        $handler = new RecordingHandler(declined: ['<m1@example.com>'], failing: ['<m3@example.com>'], failingWants: ['<m4@example.com>']);
+        $recording = new RecordingStateStore($this->states);
+
+        $this->watcher([$client], $recording)->watch($this->mailbox(), $handler, fn (): bool => $this->stop);
+
+        self::assertSame(['<m5@example.com>'], $handler->handled);
+        self::assertSame([11, 12, 13, 14, 15], $recording->savedUids);
+
+        $this->stop = false;
+        $again = new FakeImapClient($client->messages);
+        $again->idleSteps = [$this->stopStep()];
+        $retry = new RecordingHandler();
+        $this->watch([$again], $retry);
+
+        self::assertSame([], $retry->offered);
+    }
+
+    public function testAStopInTheMiddleKeepsTheRestForTheNextRun(): void
+    {
+        $client = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $first = new RecordingHandler();
+        $first->onHandle = function (): void {
+            $this->stop = true;
+        };
+        $this->watch([$client], $first);
+
+        self::assertEquals(new MailboxState(100, 11), $this->states->get($this->mailbox()));
+
+        $this->stop = false;
+        $again = new FakeImapClient($client->messages);
+        $again->idleSteps = [$this->stopStep()];
+        $second = new RecordingHandler();
+        $this->watch([$again], $second);
+
+        self::assertSame(['<m2@example.com>'], $second->offered);
+    }
+
+    public function testAMessageLostWithTheConnectionIsOfferedAgain(): void
+    {
+        $first = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $first->fetchFailures[12] = new ImapConnectionException('The server closed the connection.');
+        $second = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $second->idleSteps = [$this->stopStep()];
+        $handler = new RecordingHandler();
+
+        $this->watch([$first, $second], $handler);
+
+        self::assertSame(['<m1@example.com>', '<m2@example.com>'], $handler->handled);
+        self::assertContains('searchUidsFrom 12', $second->calls);
+    }
+
+    public function testMailArrivingDuringIdleMovesTheState(): void
+    {
+        $client = new FakeImapClient([11 => $this->mail(1)]);
+        $client->idleSteps = [
+            function (FakeImapClient $client): bool {
+                $client->messages[12] = $this->mail(2);
+                $client->messages[13] = $this->mail(3);
+
+                return true;
+            },
+            function (): bool {
+                $this->stop = true;
+                self::assertEquals(new MailboxState(100, 13), $this->states->get($this->mailbox()));
+
+                return false;
+            },
+        ];
+
+        $this->watch([$client], new RecordingHandler(declined: ['<m3@example.com>']));
+
+        self::assertEquals(new MailboxState(100, 13), $this->states->get($this->mailbox()));
+    }
+
+    public function testAStoreThatKeepsNothingStillOffersNoMessageTwiceInOneRun(): void
+    {
+        $first = new FakeImapClient([11 => $this->mail(1)]);
+        $first->idleSteps = [
+            function (FakeImapClient $client): bool {
+                $client->messages[12] = $this->mail(2);
+
+                return true;
+            },
+            static fn (): bool => throw new ImapConnectionException('dropped'),
+        ];
+        $second = new FakeImapClient([11 => $this->mail(1), 12 => $this->mail(2)]);
+        $second->idleSteps = [$this->stopStep()];
+        $forgetful = new class implements MailboxStateStoreInterface {
+            public function get(Mailbox $mailbox): ?MailboxState
+            {
+                return null;
+            }
+
+            public function save(Mailbox $mailbox, MailboxState $state): void
+            {
+            }
+        };
+        $handler = new RecordingHandler();
+
+        $this->watcher([$first, $second], $forgetful)->watch($this->mailbox(), $handler, fn (): bool => $this->stop);
+
+        self::assertSame(['<m1@example.com>', '<m2@example.com>'], $handler->offered);
+        self::assertContains('searchUidsFrom 12', $first->calls);
+        self::assertContains('searchUidsFrom 13', $second->calls);
+    }
+
     /** @var list<string> */
     private array $factoryDsns = [];
 
@@ -278,18 +489,23 @@ final class MailboxWatcherServiceTest extends TestCase
      */
     private function watch(array $clients, IncomingMailHandlerInterface $handler, ?Mailbox $mailbox = null): void
     {
-        $this->watcher($clients)->watch($mailbox ?? new Mailbox('answers', self::DSN), $handler, fn (): bool => $this->stop);
+        $this->watcher($clients)->watch($mailbox ?? $this->mailbox(), $handler, fn (): bool => $this->stop);
     }
 
     /**
      * @param list<FakeImapClient> $clients
      */
-    private function watcher(array $clients): MailboxWatcherService
+    private function watcher(array $clients, ?MailboxStateStoreInterface $states = null): MailboxWatcherService
     {
         $factory = new FakeImapClientFactory($clients);
         $this->factoryDsns = &$factory->dsns;
 
-        return new MailboxWatcherService($factory, new MessageReaderService(), $this->clock, $this->logger);
+        return new MailboxWatcherService($factory, new MessageReaderService(), $this->clock, $this->logger, states: $states ?? $this->states);
+    }
+
+    private function mailbox(): Mailbox
+    {
+        return new Mailbox('answers', self::DSN);
     }
 
     /**
