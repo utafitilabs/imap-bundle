@@ -20,6 +20,7 @@ command.
 - [Why](#why)
 - [Install](#install)
 - [A taste](#a-taste)
+- [Resuming after a restart](#resuming-after-a-restart)
 - [Automated mail and bounces](#automated-mail-and-bounces)
 - [Documentation](#documentation)
 - [Requirements](#requirements)
@@ -54,8 +55,9 @@ return [
 ];
 ```
 
-That one line registers the `imap:watch` command, the mailbox watcher, the message reader
-and the quoted-reply stripper, each autowirable by class. Then name a mailbox and the
+That one line registers the `imap:watch` command, the mailbox watcher, the store of how far
+each mailbox has been read, the message reader and the quoted-reply stripper, each
+autowirable by class. Then name a mailbox and the
 service that handles its mail:
 
 ```yaml
@@ -112,16 +114,46 @@ final class ReplyHandler implements IncomingMailHandlerInterface
 php bin/console imap:watch replies
 ```
 
-The process catches up on the last three days, then waits with IDLE and hands over each
-new message within seconds; it reconnects with a doubling delay after any network error
-and stops cleanly on SIGTERM or Ctrl+C.
+The first run catches up on the last three days, then waits with IDLE and hands over each
+new message within seconds; a restart resumes after the last message read. It reconnects
+with a doubling delay after any network error and stops cleanly on SIGTERM or Ctrl+C.
 
 Models: `Message` (headers, `textBody`, `htmlBody`, `attachments`, `deliveryFailure`),
 `MessageHeaders` (Message-ID, from, to, cc, subject, date, In-Reply-To, References,
 `authenticationResults`, `isAutomated()`, `isDeliveryReport()`), `Address`, `Attachment`
 (file name, type, size — never the content), `DeliveryFailure` and `FailedRecipient`. Services: `MessageReaderService` (raw RFC 822 → `Message`),
 `QuotedReplyStripperService` (Gmail, Outlook, Apple Mail, Yahoo and Thunderbird quote
-forms), `MailboxWatcherService`.
+forms), `MailboxWatcherService`, `MailboxStateStoreInterface`.
+
+## Resuming after a restart
+
+The watcher remembers how far it has read each mailbox, as IMAP clients do: the folder's
+UIDVALIDITY and the highest UID it has offered
+([RFC 3501 §2.3.1.1](https://www.rfc-editor.org/rfc/rfc3501#section-2.3.1.1),
+[RFC 4549 §4.3](https://www.rfc-editor.org/rfc/rfc4549#section-4.3)). A restart resumes
+after that UID, so a message is offered once — handled, declined or failed — whatever
+your handler keeps. Only the first run, or a folder whose UIDVALIDITY changed, catches up
+on the last `catch_up_days`.
+
+The state lives in a cache pool, `cache.app` by default. Out of the box `cache.app` is a
+set of files under `var/cache`, which a deploy from a fresh image starts without; give the
+watcher a pool that survives deploys, such as one in the database:
+
+```yaml
+# config/packages/cache.yaml
+framework:
+    cache:
+        default_doctrine_dbal_provider: doctrine.dbal.default_connection
+        pools:
+            imap.state:
+                adapter: cache.adapter.doctrine_dbal
+
+# config/packages/utafitilabs_imap.yaml
+utafitilabs_imap:
+    state_pool: imap.state
+```
+
+See [docs/index.md](docs/index.md#resuming-after-a-restart) for the details and other pools.
 
 ## Automated mail and bounces
 
@@ -181,7 +213,7 @@ public function handle(Message $message): void
 ## Documentation
 
 Read the documentation at [docs/index.md](docs/index.md) — configuration reference, the
-handler contract, running the watcher under a process supervisor or in a container,
+handler contract, resuming after a restart, running the watcher under a process supervisor or in a container,
 security, providers, and using the client on its own.
 
 ## Requirements

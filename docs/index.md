@@ -12,6 +12,10 @@ Written on PHP built-ins and Symfony components only.
   - [The DSN](#the-dsn)
   - [A mailbox that is off](#a-mailbox-that-is-off)
 - [The handler](#the-handler)
+- [Resuming after a restart](#resuming-after-a-restart)
+  - [A pool that survives deploys](#a-pool-that-survives-deploys)
+  - [Starting over](#starting-over)
+  - [Your own store](#your-own-store)
 - [Running the watcher](#running-the-watcher)
   - [What the watcher does](#what-the-watcher-does)
   - [Process supervisors and containers](#process-supervisors-and-containers)
@@ -53,6 +57,7 @@ return [
 ```yaml
 # config/packages/utafitilabs_imap.yaml
 utafitilabs_imap:
+    state_pool: cache.app                       # default cache.app; see Resuming after a restart
     mailboxes:
         replies:                                # the name you pass to imap:watch
             dsn: '%env(IMAP_REPLIES_DSN)%'      # required to be set, may be empty (off)
@@ -66,10 +71,12 @@ utafitilabs_imap:
 
 | Key | Default | Meaning |
 |---|---|---|
+| `state_pool` | `cache.app` | The service id of the cache pool (PSR-6) that remembers how far each mailbox has been read; give it one that survives deploys |
+| `mailboxes.<name>.…` | | One entry per mailbox, with the keys below |
 | `dsn` | `''` | Where and as whom to log in; empty turns the mailbox off |
 | `handler` | — | The id of the service implementing `IncomingMailHandlerInterface` |
 | `folder` | `INBOX` | The folder watched; non-ASCII names are sent in modified UTF-7 |
-| `catch_up_days` | `3` | On every connect, mail received this many days back is offered again |
+| `catch_up_days` | `3` | On a first run, or when the folder's UIDVALIDITY changed, mail received this many days back is offered |
 | `idle_seconds` | `1740` | IDLE is ended and issued again after this long; RFC 2177 lets servers drop an IDLE after 30 minutes |
 | `poll_seconds` | `300` | How often a server without IDLE is checked with NOOP and UID SEARCH |
 | `max_message_bytes` | `10485760` | Messages larger than this (by RFC822.SIZE) are skipped without being fetched |
@@ -114,10 +121,12 @@ Precedence, List-Id, List-Unsubscribe) and its size, and asks `wants()`. Only wh
 the whole message fetched, read and passed to `handle()`. An application that takes every
 message returns `true`.
 
-`wants()` is also where the handler declines what it has already handled: the watcher
-offers the last `catch_up_days` of mail again on every connect, so the handler keeps its
-own record of Message-IDs it has seen. A message without a Message-ID gets a stable one
-made from its UIDVALIDITY and UID (`<1730000000.4101@replies.imap.invalid>`).
+The watcher offers each message once: it remembers the last UID it offered (see
+[Resuming after a restart](#resuming-after-a-restart)). A handler that also keeps the
+Message-IDs it has stored can decline a message in `wants()` should it come again — after
+the state was lost, or a folder's UIDVALIDITY changed — but it does not have to. A message
+without a Message-ID gets a stable one made from its UIDVALIDITY and UID
+(`<1730000000.4101@replies.imap.invalid>`).
 
 A handler that takes replies declines what a machine sent with
 `$headers->isAutomated()`, and lets bounces through with `$headers->isDeliveryReport()`
@@ -125,8 +134,103 @@ when it wants to know which of its messages failed — see
 [Automated mail and bounces](#automated-mail-and-bounces).
 
 An exception thrown by `wants()` or `handle()` is logged with the message's UID and
-Message-ID, and the watcher goes on with the next message; the failed message is offered
-again when the watcher restarts.
+Message-ID, and the watcher goes on with the next message. The failed message is not
+offered again, so a message that always fails cannot stop the mailbox; find it in the
+log by its UID and Message-ID. Only a message cut off by a lost connection before the
+handler had it is offered again, after the reconnect.
+
+## Resuming after a restart
+
+A watcher that offered the last days of mail on every start would rely on the handler to
+recognise what it had already stored, and an application that deletes its records would
+import that mail again. So the watcher keeps, per mailbox name and folder, what an IMAP
+client keeps to resynchronise
+([RFC 4549 §4.3](https://www.rfc-editor.org/rfc/rfc4549#section-4.3)): the folder's
+UIDVALIDITY and the highest UID offered to the handler. A UID means something only under
+its UIDVALIDITY ([RFC 3501 §2.3.1.1](https://www.rfc-editor.org/rfc/rfc3501#section-2.3.1.1)).
+
+On every connect, after EXAMINE:
+
+- **Same UIDVALIDITY as saved.** The watcher searches `UID SEARCH UID <last + 1>:*` and
+  offers what it finds. An open range always matches the folder's newest message, even
+  when its UID is below the start (RFC 3501 §6.4.8), so UIDs at or below the saved one
+  are dropped.
+- **No state, or another UIDVALIDITY.** The watcher catches up on the last
+  `catch_up_days`, as on a first run, then moves the state on to the newest UID the folder
+  had (UIDNEXT − 1), so mail older than the window is never offered later. A changed
+  UIDVALIDITY is logged.
+
+The state moves past each message as soon as the handler is done with it — handled,
+declined, failed, too large, or gone before it was fetched — and is saved each time, in
+the catch-up and during IDLE alike. A stop in the middle of a catch-up leaves the rest for
+the next run.
+
+### A pool that survives deploys
+
+The state is kept by `CacheMailboxStateStore` in the pool `state_pool` names, `cache.app`
+by default, as two integers under a key hashed from the mailbox name and folder; nothing
+of the DSN is stored. Out of the box `cache.app` is a set of files under the kernel's
+cache directory (`framework.cache.directory`, from Symfony 7.4 under
+`%kernel.share_dir%`, which is `var/cache` unless `APP_SHARE_DIR` sets it), so a deploy
+from a fresh container image starts without it and the first run after it catches up on
+the window again. Give the watcher a pool that survives deploys
+([Cache: custom pools](https://symfony.com/doc/current/cache.html#creating-custom-namespaced-pools)).
+
+In the database, with the
+[Doctrine DBAL adapter](https://symfony.com/doc/current/components/cache/adapters/doctrine_dbal_adapter.html)
+(the adapter creates its `cache_items` table on first use, and Doctrine Migrations
+includes it in a diff):
+
+```yaml
+# config/packages/cache.yaml
+framework:
+    cache:
+        default_doctrine_dbal_provider: doctrine.dbal.default_connection
+        pools:
+            imap.state:
+                adapter: cache.adapter.doctrine_dbal
+
+# config/packages/utafitilabs_imap.yaml
+utafitilabs_imap:
+    state_pool: imap.state
+```
+
+On files on a persistent volume, with the
+[filesystem adapter](https://symfony.com/doc/current/components/cache/adapters/filesystem_adapter.html):
+`framework.cache.directory` (or `APP_SHARE_DIR`) moves every filesystem pool, `cache.app`
+among them, onto that volume:
+
+```yaml
+# config/packages/cache.yaml
+framework:
+    cache:
+        directory: '/srv/data/cache-pools'      # a volume kept between deploys
+```
+
+Redis works as well ([Cache](https://symfony.com/doc/current/cache.html#configuring-cache-with-frameworkbundle)).
+A pool that evicts entries (APCu, Memcached under memory pressure) loses the state; the
+watcher then catches up on the window, as on a first run.
+
+### Starting over
+
+Clearing the pool forgets every mailbox's state, and the next start catches up on the
+last `catch_up_days`:
+
+```console
+php bin/console cache:pool:clear imap.state
+```
+
+`cache:pool:clear cache.app` (and `cache:pool:clear --all`) does the same when the state is
+in `cache.app`. Point a mailbox entry at another account under the same name and folder
+only after clearing it: a coincidentally equal UIDVALIDITY would otherwise resume at the
+old account's UID.
+
+### Your own store
+
+`MailboxStateStoreInterface` (`get(Mailbox): ?MailboxState`, `save(Mailbox, MailboxState)`)
+is aliased to the bundle's store; decorate or replace the service
+`utafitilabs_imap.mailbox_state_store` to keep the state elsewhere. `MailboxState` holds
+`uidValidity` and `lastUid`; `get()` returns null when nothing usable is saved.
 
 ## Running the watcher
 
@@ -140,15 +244,17 @@ Run one process per mailbox.
 
 1. Connects, verifies the server's certificate, logs in and opens the folder with EXAMINE
    (read-only).
-2. Catches up: searches the mail received since `catch_up_days` ago and offers it to the
-   handler (headers first, as above).
+2. Resumes after the last UID it offered under the folder's UIDVALIDITY, or, on a first
+   run or after the UIDVALIDITY changed, catches up on the mail received since
+   `catch_up_days` ago; either way the handler gets the headers first, as above. See
+   [Resuming after a restart](#resuming-after-a-restart).
 3. Waits with IDLE. When the server announces new mail it ends IDLE, searches by UID for
    everything above the highest UID it has seen, and offers that. IDLE is renewed every
    `idle_seconds`. A server without IDLE is checked every `poll_seconds` instead; this is
    logged once.
 4. On any network or protocol error it closes the connection and reconnects after 1 s,
-   2 s, 4 s … up to 5 minutes; a successful connection resets the delay. If the folder's
-   UIDVALIDITY changed, the catch-up starts afresh.
+   2 s, 4 s … up to 5 minutes; a successful connection resets the delay, and the watcher
+   resumes after the last UID it offered.
 5. On SIGTERM or SIGINT it ends IDLE, logs out and exits with 0, usually within a second.
 
 ### Process supervisors and containers
@@ -169,7 +275,8 @@ signal the runtime sends ends it cleanly.
 
 The watcher logs on the `imap` channel (Monolog) or the application's `logger`. A record
 carries the mailbox name, UIDs, Message-IDs and what was decided — handled, declined,
-skipped as too large, failed, reconnecting — and never a DSN, a password, an address, a
+skipped as too large, failed, reconnecting, resuming after a UID, a changed UIDVALIDITY —
+and never a DSN, a password, an address, a
 subject or a body.
 
 ## Reading messages

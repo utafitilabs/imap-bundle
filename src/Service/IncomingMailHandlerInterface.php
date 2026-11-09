@@ -21,11 +21,11 @@ use UtafitiLabs\ImapBundle\Model\MessageHeaders;
  *
  * The watcher first fetches only each message's identifying headers and asks
  * wants(); only a message the handler wants is fetched whole and passed to
- * handle(). wants() is also where a handler declines a message it has already
- * handled (by its Message-ID), since the watcher offers the last days' mail
- * again on every (re)connect. An application that takes every message returns
- * true. An exception from either method is logged and the watcher goes on with
- * the next message.
+ * handle(). The watcher remembers the last UID it offered, so each message is
+ * offered once; a handler may still decline in wants() a message it already
+ * stored, should the state be lost. An application that takes every message
+ * returns true. An exception from either method is logged and the watcher goes
+ * on with the next message, without offering the failed one again.
  */
 interface IncomingMailHandlerInterface
 {

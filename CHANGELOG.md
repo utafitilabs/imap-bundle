@@ -4,8 +4,42 @@ All notable changes to `utafitilabs/imap-bundle` are documented here.
 
 ## Contents
 
+- [v0.1.2 — 2026-11-09](#v012--2026-11-09)
 - [v0.1.1 — 2026-11-08](#v011--2026-11-08)
 - [v0.1.0 — 2026-11-08](#v010--2026-11-08)
+
+## v0.1.2 — 2026-11-09
+
+### Fixed
+
+- A restart of `imap:watch` no longer offers the last `catch_up_days` of mail again:
+  the watcher remembers, per mailbox name and folder, the folder's UIDVALIDITY and the
+  highest UID it offered (RFC 3501 §2.3.1.1, RFC 4549 §4.3), and resumes with
+  `UID SEARCH UID <last + 1>:*`. A handler that forgot what it had stored, for example
+  because the application deleted those records, no longer receives that mail as new.
+- The UID an open range `n:*` always returns, even below `n`, is never offered again.
+- After a first catch-up the watcher moves on to the folder's newest UID, so mail older
+  than the window is no longer offered when the next message arrives.
+
+### Added
+
+- `MailboxStateStoreInterface` (`get(Mailbox): ?MailboxState`,
+  `save(Mailbox, MailboxState)`), `MailboxState` (`uidValidity`, `lastUid`) and
+  `CacheMailboxStateStore`, which keeps the state in a PSR-6 pool under a hashed key.
+- `utafitilabs_imap.state_pool`: the cache pool that keeps the state, `cache.app` by
+  default; give it one that survives deploys (a Doctrine DBAL pool, or files on a
+  persistent volume).
+- `MailboxWatcherService` takes the store as an optional last argument; without one the
+  state lives in memory.
+
+### Changed
+
+- The catch-up window applies to a first run, a lost state or a changed UIDVALIDITY
+  only, no longer to every connect.
+- A message whose `wants()` or `handle()` threw is not offered again after a restart;
+  the state moves past it as past any other, so a message that always fails cannot stop
+  the mailbox.
+- `psr/cache` and `symfony/cache` are required (FrameworkBundle already installs both).
 
 ## v0.1.1 — 2026-11-08
 
